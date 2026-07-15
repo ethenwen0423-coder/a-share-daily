@@ -571,20 +571,20 @@ button {
   gap: 7px;
 }
 .field > span {
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 700;
   color: #5f6677;
 }
 .field input,
 .field select {
   width: 100%;
-  height: 40px;
+  height: 46px;
   border: 1px solid #d9dce3;
   border-radius: 9px;
   background: #fbfbf8;
-  padding: 0 11px;
+  padding: 0 14px;
   color: var(--ink);
-  font-size: 11px;
+  font-size: 15px;
   outline: none;
 }
 .field input:focus,
@@ -593,14 +593,16 @@ button {
   box-shadow: 0 0 0 3px rgba(47, 91, 211, 0.08);
 }
 .hint {
-  font-size: 9px;
+  font-size: 12px;
+  line-height: 1.65;
   color: var(--muted);
   margin: 13px 0 0;
 }
 .sectionHint {
   margin: -10px 0 14px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 13px;
+  line-height: 1.6;
 }
 .indicatorPicker {
   display: flex;
@@ -612,8 +614,10 @@ button {
   border: 1px solid var(--line);
   background: #f7f6f2;
   border-radius: 999px;
-  padding: 8px 11px;
-  font-size: 10px;
+  min-height: 42px;
+  padding: 10px 15px;
+  font-size: 14px;
+  font-weight: 700;
 }
 .indicatorPicker button.selected {
   border-color: var(--blue);
@@ -626,13 +630,13 @@ button {
 .indicatorPicker small {
   display: inline-grid;
   place-items: center;
-  min-width: 17px;
-  height: 17px;
+  min-width: 20px;
+  height: 20px;
   margin-left: 7px;
   border-radius: 999px;
   background: var(--blue);
   color: white;
-  font: 700 8px monospace;
+  font: 700 10px monospace;
 }
 .indicatorRows {
   border: 1px solid var(--line);
@@ -641,10 +645,10 @@ button {
 }
 .indicatorRow {
   display: grid;
-  grid-template-columns: 34px 130px minmax(250px, 1fr) 112px 48px;
+  grid-template-columns: 34px 145px minmax(280px, 1fr) 128px 58px;
   align-items: center;
   gap: 12px;
-  padding: 13px 14px;
+  padding: 16px 14px;
   border-bottom: 1px solid var(--line);
 }
 .indicatorRow:last-child {
@@ -652,7 +656,7 @@ button {
 }
 .indicatorOrder {
   color: #a4aab7;
-  font: 700 9px monospace;
+  font: 700 11px monospace;
 }
 .indicatorIdentity {
   display: flex;
@@ -660,11 +664,11 @@ button {
   gap: 4px;
 }
 .indicatorIdentity b {
-  font-size: 11px;
+  font-size: 14px;
 }
 .indicatorIdentity small {
   color: var(--muted);
-  font: 8px monospace;
+  font: 11px monospace;
 }
 .indicatorParams {
   display: flex;
@@ -680,7 +684,7 @@ button {
 .indicatorParams label > span,
 .sourceSelect > span {
   white-space: nowrap;
-  font-size: 8px;
+  font-size: 11px;
   color: var(--muted);
 }
 .indicatorParams input,
@@ -688,20 +692,20 @@ button {
 .conditionRow input,
 .conditionRow select,
 .ruleHeader select {
-  height: 34px;
+  height: 42px;
   border: 1px solid #d9dce3;
   border-radius: 8px;
   background: #fbfbf8;
   color: var(--ink);
-  padding: 0 8px;
-  font-size: 9px;
+  padding: 0 10px;
+  font-size: 14px;
   outline: none;
 }
 .indicatorParams input {
-  width: 62px;
+  width: 76px;
 }
 .sourceSelect select {
-  width: 80px;
+  width: 100px;
 }
 .sourceSelect select:disabled {
   opacity: 1;
@@ -712,14 +716,14 @@ button {
   border: 0;
   background: transparent;
   color: #9a5260;
-  font-size: 9px;
+  font-size: 12px;
 }
 .configEmpty,
 .conditionEmpty {
   padding: 22px;
   text-align: center;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 13px;
 }
 .rulesGrid {
   display: grid;
@@ -739,7 +743,7 @@ button {
   border-bottom: 1px solid var(--line);
 }
 .ruleHeader > span {
-  font-size: 10px;
+  font-size: 14px;
   font-weight: 700;
 }
 .ruleHeader label {
@@ -748,11 +752,11 @@ button {
   gap: 7px;
 }
 .ruleHeader label > span {
-  font-size: 8px;
+  font-size: 11px;
   color: var(--muted);
 }
 .ruleHeader select {
-  min-width: 118px;
+  min-width: 152px;
 }
 .conditionList {
   display: flex;
@@ -762,19 +766,19 @@ button {
 }
 .conditionRow {
   display: grid;
-  grid-template-columns: 24px minmax(120px, 1.2fr) 90px 70px minmax(120px, 1fr) 28px;
-  gap: 7px;
+  grid-template-columns: 28px minmax(150px, 1.2fr) 112px 96px minmax(150px, 1fr) 34px;
+  gap: 8px;
   align-items: center;
 }
 .conditionNumber {
   display: grid;
   place-items: center;
-  width: 22px;
-  height: 22px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
   background: #f0f1f4;
   color: var(--muted);
-  font: 700 8px monospace;
+  font: 700 11px monospace;
 }
 .conditionRow select,
 .conditionRow input {
@@ -785,10 +789,10 @@ button {
   color: var(--muted);
 }
 .removeCondition {
-  width: 28px;
-  height: 28px;
+  width: 34px;
+  height: 34px;
   border-radius: 7px;
-  font-size: 16px;
+  font-size: 18px;
 }
 .removeCondition:hover,
 .removeConfig:hover {
@@ -800,8 +804,9 @@ button {
   background: var(--blue-soft);
   color: var(--blue);
   border-radius: 9px;
-  padding: 9px 12px;
-  font-size: 10px;
+  min-height: 42px;
+  padding: 10px 14px;
+  font-size: 13px;
   font-weight: 700;
 }
 .addCondition:disabled {
@@ -810,7 +815,7 @@ button {
 }
 .summaryIndicators {
   color: #99a7c1;
-  font-size: 8px;
+  font-size: 11px;
   line-height: 1.6;
   margin: 14px 0 0;
 }
@@ -820,8 +825,8 @@ button {
 .suffix span {
   position: absolute;
   right: 11px;
-  top: 12px;
-  font-size: 10px;
+  top: 15px;
+  font-size: 13px;
   color: var(--muted);
 }
 .runSummary {
@@ -883,7 +888,8 @@ button {
 }
 .fieldError {
   color: #ff8d83;
-  font-size: 9px;
+  font-size: 12px;
+  line-height: 1.5;
 }
 .runningPage {
   min-height: calc(100vh - 72px);
@@ -1187,9 +1193,9 @@ td {
   cursor: default;
 }
 .lookupStatus {
-  min-height: 20px;
+  min-height: 24px;
   margin: 10px 0 2px;
-  font-size: 10px;
+  font-size: 13px;
   color: var(--muted);
   display: flex;
   align-items: center;
@@ -1226,14 +1232,14 @@ td {
 }
 .instrumentMatches > span {
   width: 100%;
-  font-size: 10px;
+  font-size: 13px;
   color: var(--muted);
 }
 .instrumentMatches button {
   border: 1px solid #ccd5f4;
   background: var(--white);
   border-radius: 9px;
-  padding: 8px 11px;
+  padding: 10px 13px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1244,10 +1250,10 @@ td {
   box-shadow: 0 0 0 2px rgba(47, 91, 211, 0.1);
 }
 .instrumentMatches b {
-  font-size: 10px;
+  font-size: 13px;
 }
 .instrumentMatches small {
-  font-size: 9px;
+  font-size: 11px;
   color: var(--muted);
 }
 @keyframes lookupSpin {
@@ -1255,7 +1261,7 @@ td {
     transform: rotate(360deg);
   }
 }
-@media (max-width: 1100px) {
+@media (max-width: 1280px) {
   .appShell {
     grid-template-columns: 82px 1fr;
   }
@@ -1264,7 +1270,9 @@ td {
   }
   .logo div,
   .researchBadge,
-  .sideFoot,
+  .sideFoot {
+    display: none;
+  }
   .sidebar nav button:not(.active) {
     font-size: 0;
   }
@@ -1411,12 +1419,24 @@ td {
   .rulesGrid {
     grid-template-columns: 1fr;
   }
+  .field input,
+  .field select,
+  .indicatorParams input,
+  .sourceSelect select,
+  .conditionRow input,
+  .conditionRow select,
+  .ruleHeader select {
+    font-size: 16px;
+  }
   .indicatorRow {
     grid-template-columns: 24px 1fr 44px;
     align-items: start;
+    gap: 12px;
+    padding: 16px 14px;
   }
   .indicatorParams {
     grid-column: 2/4;
+    gap: 10px;
   }
   .sourceSelect {
     grid-column: 2/4;
@@ -1428,9 +1448,23 @@ td {
   .ruleHeader {
     align-items: flex-start;
     gap: 10px;
+    flex-wrap: wrap;
+  }
+  .ruleHeader label,
+  .ruleHeader select {
+    width: 100%;
+  }
+  .ruleHeader label > span {
+    flex: 0 0 52px;
+  }
+  .ruleHeader label select {
+    width: auto;
+    min-width: 0;
+    flex: 1;
   }
   .conditionRow {
     grid-template-columns: 24px 1fr 1fr 28px;
+    gap: 10px 8px;
   }
   .conditionRow > select:nth-of-type(1) {
     grid-column: 2/4;

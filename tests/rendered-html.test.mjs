@@ -30,6 +30,9 @@ test("product source exposes editor, report, risk and reproducibility surfaces",
   ]);
   for (const phrase of ["技术指标", "买入与卖出规则", "回测报告", "完整交易明细", "需进一步核验", "不构成投资建议"]) assert.match(app, new RegExp(phrase));
   assert.match(styles, /@media\s*\(max-width:\s*760px\)/);
+  assert.match(styles, /\.field input,[\s\S]*?font-size:\s*15px/);
+  assert.match(styles, /\.indicatorParams input,[\s\S]*?font-size:\s*14px/);
+  assert.match(styles, /@media\s*\(max-width:\s*760px\)[\s\S]*?font-size:\s*16px/);
   assert.match(layout, /量化策略实验室/);
   assert.match(app, /searchInstruments/);
   assert.match(app, /输入代码后将自动带出名称和资产类型/);
