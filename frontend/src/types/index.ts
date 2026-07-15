@@ -51,6 +51,37 @@ export type InstrumentSearchResult = {
   asset_type: "stock" | "etf" | "index";
   exchange: string;
 };
+export type IndicatorType =
+  | "sma"
+  | "ema"
+  | "macd"
+  | "rsi"
+  | "bollinger"
+  | "volume_ma";
+export type PriceSource = "open" | "high" | "low" | "close" | "volume";
+export type IndicatorConfig = {
+  id: string;
+  type: IndicatorType;
+  params: Record<string, number>;
+  source: PriceSource;
+};
+export type Comparison =
+  | "greater_than"
+  | "less_than"
+  | "equal"
+  | "cross_above"
+  | "cross_below";
+export type RuleConditionConfig = {
+  id: string;
+  left: string;
+  comparison: Comparison;
+  rightMode: "indicator" | "value";
+  right: string | number;
+};
+export type RuleGroupConfig = {
+  operator: "and" | "or";
+  conditions: RuleConditionConfig[];
+};
 export type FormState = {
   symbol: string;
   instrumentName: string;
@@ -61,8 +92,9 @@ export type FormState = {
   commission: number;
   stampDuty: number;
   slippage: number;
-  fast: number;
-  slow: number;
+  indicators: IndicatorConfig[];
+  entryRule: RuleGroupConfig;
+  exitRule: RuleGroupConfig;
   position: number;
   stopLoss: number;
   takeProfit: number;

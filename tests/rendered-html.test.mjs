@@ -21,10 +21,12 @@ test("server-renders the quant research product", async () => {
 });
 
 test("product source exposes editor, report, risk and reproducibility surfaces", async () => {
-  const [app, styles, layout] = await Promise.all([
+  const [app, styles, layout, client, demoEngine] = await Promise.all([
     readFile(new URL("../frontend/src/App.tsx", import.meta.url), "utf8"),
     readFile(new URL("../frontend/src/styles.css", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../frontend/src/api/client.ts", import.meta.url), "utf8"),
+    readFile(new URL("../frontend/src/utils/demoEngine.ts", import.meta.url), "utf8"),
   ]);
   for (const phrase of ["技术指标", "买入与卖出规则", "回测报告", "完整交易明细", "需进一步核验", "不构成投资建议"]) assert.match(app, new RegExp(phrase));
   assert.match(styles, /@media\s*\(max-width:\s*760px\)/);
@@ -32,4 +34,12 @@ test("product source exposes editor, report, risk and reproducibility surfaces",
   assert.match(app, /searchInstruments/);
   assert.match(app, /输入代码后将自动带出名称和资产类型/);
   assert.match(app, /该代码对应多个标的，请确认/);
+  assert.match(app, /同一指标可添加多次/);
+  assert.match(app, /RuleGroupEditor/);
+  assert.match(app, /removeIndicator|删除.*指标/);
+  assert.match(app, /removeCondition|删除.*条件/);
+  assert.match(client, /indicators: form\.indicators/);
+  assert.match(client, /entry_rule: serializeRule/);
+  assert.match(demoEngine, /calculateIndicator/);
+  assert.match(demoEngine, /evaluateGroup\(form\.entryRule/);
 });

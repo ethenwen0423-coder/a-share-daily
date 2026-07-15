@@ -23,34 +23,24 @@ export async function searchInstruments(
 
 export async function runApiBacktest(form: FormState): Promise<BacktestResult> {
   if (!localApi) throw new Error("公网演示模式未连接 Python 服务");
+  const serializeRule = (group: FormState["entryRule"]) => ({
+    operator: group.operator,
+    conditions: group.conditions.map((condition) => ({
+      left: condition.left,
+      comparison: condition.comparison,
+      right: condition.right,
+    })),
+  });
   const configuration = {
-    name: "双均线趋势策略",
-    indicators: [
-      {
-        id: "ma_fast",
-        type: "sma",
-        params: { period: form.fast },
-        source: "close",
-      },
-      {
-        id: "ma_slow",
-        type: "sma",
-        params: { period: form.slow },
-        source: "close",
-      },
-    ],
-    entry_rule: {
-      operator: "and",
-      conditions: [
-        { left: "ma_fast", comparison: "cross_above", right: "ma_slow" },
-      ],
-    },
-    exit_rule: {
-      operator: "or",
-      conditions: [
-        { left: "ma_fast", comparison: "cross_below", right: "ma_slow" },
-      ],
-    },
+    name: "可视化技术策略",
+    indicators: form.indicators.map(({ id, type, params, source }) => ({
+      id,
+      type,
+      params,
+      source,
+    })),
+    entry_rule: serializeRule(form.entryRule),
+    exit_rule: serializeRule(form.exitRule),
     position: { type: "fixed_ratio", value: form.position },
     risk: {
       stop_loss: form.stopLoss,

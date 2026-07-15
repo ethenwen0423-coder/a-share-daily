@@ -4,8 +4,13 @@ import { runApiBacktest, searchInstruments } from "./api/client";
 import EquityChart from "./components/EquityChart";
 import type {
   BacktestResult,
+  Comparison,
   FormState,
+  IndicatorConfig,
+  IndicatorType,
   InstrumentSearchResult,
+  RuleConditionConfig,
+  RuleGroupConfig,
 } from "./types";
 import { runDemoBacktest } from "./utils/demoEngine";
 
@@ -15,7 +20,24 @@ const nav: [Page, string, string][] = [
   ["editor", "策略工作台", "⌘"],
   ["history", "历史记录", "◷"],
 ];
-const indicatorOptions = ["SMA", "EMA", "MACD", "RSI", "布林带", "成交量均线"];
+const indicatorOptions: { type: IndicatorType; label: string }[] = [
+  { type: "sma", label: "SMA" },
+  { type: "ema", label: "EMA" },
+  { type: "macd", label: "MACD" },
+  { type: "rsi", label: "RSI" },
+  { type: "bollinger", label: "布林带" },
+  { type: "volume_ma", label: "成交量均线" },
+];
+const indicatorNames: Record<IndicatorType, string> = Object.fromEntries(
+  indicatorOptions.map((item) => [item.type, item.label]),
+) as Record<IndicatorType, string>;
+const comparisonLabels: Record<Comparison, string> = {
+  greater_than: "大于",
+  less_than: "小于",
+  equal: "等于",
+  cross_above: "上穿",
+  cross_below: "下穿",
+};
 const assetTypeLabel: Record<FormState["assetType"], string> = {
   stock: "A股",
   etf: "ETF / 场内基金",
@@ -31,8 +53,34 @@ const defaultForm: FormState = {
   commission: 0.0003,
   stampDuty: 0.0005,
   slippage: 0.0005,
-  fast: 5,
-  slow: 20,
+  indicators: [
+    { id: "ma_fast", type: "sma", params: { period: 5 }, source: "close" },
+    { id: "ma_slow", type: "sma", params: { period: 20 }, source: "close" },
+  ],
+  entryRule: {
+    operator: "and",
+    conditions: [
+      {
+        id: "entry_default",
+        left: "ma_fast",
+        comparison: "cross_above",
+        rightMode: "indicator",
+        right: "ma_slow",
+      },
+    ],
+  },
+  exitRule: {
+    operator: "or",
+    conditions: [
+      {
+        id: "exit_default",
+        left: "ma_fast",
+        comparison: "cross_below",
+        rightMode: "indicator",
+        right: "ma_slow",
+      },
+    ],
+  },
   position: 1,
   stopLoss: 0.08,
   takeProfit: 0.2,
@@ -43,6 +91,28 @@ const pct = (v: number | null | undefined) =>
   v == null ? "—" : `${v >= 0 ? "+" : ""}${(v * 100).toFixed(2)}%`;
 const money = (v: number) =>
   new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 0 }).format(v);
+let configSequence = 0;
+const nextConfigId = (prefix: string) =>
+  `${prefix}_${Date.now()}_${configSequence++}`;
+const indicatorLabel = (indicator: IndicatorConfig) => {
+  const name = indicatorNames[indicator.type];
+  if (indicator.type === "macd")
+    return `${name}(${indicator.params.fast_period},${indicator.params.slow_period},${indicator.params.signal_period})`;
+  if (indicator.type === "bollinger")
+    return `${name}(${indicator.params.period}, ${indicator.params.standard_deviation}σ)`;
+  return `${name}(${indicator.params.period})`;
+};
+const indicatorDefaults = (type: IndicatorType): IndicatorConfig => ({
+  id: nextConfigId(type),
+  type,
+  source: type === "volume_ma" ? "volume" : "close",
+  params:
+    type === "macd"
+      ? { fast_period: 12, slow_period: 26, signal_period: 9 }
+      : type === "bollinger"
+        ? { period: 20, standard_deviation: 2 }
+        : { period: type === "rsi" ? 14 : 20 },
+});
 
 export default function App() {
   const [page, setPage] = useState<Page>("home");
@@ -52,7 +122,6 @@ export default function App() {
   const [progress, setProgress] = useState(0);
   const [statusText, setStatusText] = useState("");
   const [error, setError] = useState("");
-  const [enabled, setEnabled] = useState<string[]>(["SMA"]);
   const go = (p: Page) => {
     setPage(p);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -171,8 +240,6 @@ export default function App() {
           <Editor
             form={form}
             update={update}
-            enabled={enabled}
-            setEnabled={setEnabled}
             onRun={run}
           />
         )}
@@ -285,7 +352,7 @@ function Home({
                 <span className="instrumentIcon">3E</span>
                 <div>
                   <b>{latest.instrument_name || latest.symbol}</b>
-                  <small>{latest.symbol} · 双均线策略</small>
+                  <small>{latest.symbol} · 可视化技术策略</small>
                 </div>
                 <span className="successPill">已完成</span>
               </div>
@@ -352,24 +419,41 @@ function Home({
 function Editor({
   form,
   update,
-  enabled,
-  setEnabled,
   onRun,
 }: {
   form: FormState;
   update: <K extends keyof FormState>(k: K, v: FormState[K]) => void;
-  enabled: string[];
-  setEnabled: (x: string[]) => void;
   onRun: () => void;
 }) {
   const [lookupState, setLookupState] = useState<
     "idle" | "loading" | "success" | "error"
   >(form.instrumentName ? "success" : "idle");
   const [matches, setMatches] = useState<InstrumentSearchResult[]>([]);
-  const toggle = (x: string) =>
-    setEnabled(
-      enabled.includes(x) ? enabled.filter((v) => v !== x) : [...enabled, x],
+  const addIndicator = (type: IndicatorType) =>
+    update("indicators", [...form.indicators, indicatorDefaults(type)]);
+  const changeIndicator = (id: string, patch: Partial<IndicatorConfig>) =>
+    update(
+      "indicators",
+      form.indicators.map((item) =>
+        item.id === id ? { ...item, ...patch } : item,
+      ),
     );
+  const removeIndicator = (id: string) => {
+    update(
+      "indicators",
+      form.indicators.filter((item) => item.id !== id),
+    );
+    const clean = (group: RuleGroupConfig): RuleGroupConfig => ({
+      ...group,
+      conditions: group.conditions.filter(
+        (condition) =>
+          condition.left !== id &&
+          !(condition.rightMode === "indicator" && condition.right === id),
+      ),
+    });
+    update("entryRule", clean(form.entryRule));
+    update("exitRule", clean(form.exitRule));
+  };
   const chooseInstrument = (instrument: InstrumentSearchResult) => {
     update("instrumentName", instrument.name);
     update("assetType", instrument.asset_type);
@@ -419,6 +503,34 @@ function Editor({
   };
   const instrumentReady =
     lookupState === "success" && Boolean(form.instrumentName);
+  const indicatorIds = new Set(form.indicators.map((item) => item.id));
+  const strategyErrors = [
+    ...(form.indicators.length ? [] : ["请至少新增一个技术指标"]),
+    ...(form.entryRule.conditions.length ? [] : ["请至少设置一个买入条件"]),
+    ...(form.exitRule.conditions.length ? [] : ["请至少设置一个卖出条件"]),
+    ...[...form.entryRule.conditions, ...form.exitRule.conditions].flatMap(
+      (condition) =>
+        !indicatorIds.has(condition.left) ||
+        (condition.rightMode === "indicator" &&
+          !indicatorIds.has(String(condition.right)))
+          ? ["交易条件引用了已删除的指标"]
+          : [],
+    ),
+    ...form.indicators.flatMap((indicator) => {
+      if (
+        indicator.type === "macd" &&
+        indicator.params.fast_period >= indicator.params.slow_period
+      )
+        return ["MACD 快线周期必须小于慢线周期"];
+      if (Object.values(indicator.params).some((value) => value <= 0))
+        return [`${indicatorNames[indicator.type]} 参数必须大于 0`];
+      return [];
+    }),
+  ];
+  const strategyError = [...new Set(strategyErrors)][0];
+  const indicatorSummary = form.indicators.length
+    ? form.indicators.map(indicatorLabel).join(" · ")
+    : "尚未添加指标";
   return (
     <main className="content editorPage">
       <div className="pageLead">
@@ -596,73 +708,60 @@ function Editor({
             </div>
           </FormSection>
           <FormSection no="03" title="技术指标">
+            <p className="sectionHint">
+              点击指标即可新增实例；同一指标可添加多次并设置不同参数。
+            </p>
             <div className="indicatorPicker">
-              {indicatorOptions.map((x) => (
+              {indicatorOptions.map((option) => {
+                const count = form.indicators.filter(
+                  (item) => item.type === option.type,
+                ).length;
+                return (
                 <button
-                  className={enabled.includes(x) ? "selected" : ""}
-                  onClick={() => toggle(x)}
-                  key={x}
+                  type="button"
+                  className={count ? "selected" : ""}
+                  aria-label={`新增 ${option.label} 指标`}
+                  onClick={() => addIndicator(option.type)}
+                  key={option.type}
                 >
-                  <span>{enabled.includes(x) ? "✓" : "＋"}</span>
-                  {x}
+                  <span>＋</span>
+                  {option.label}
+                  {count > 0 && <small>{count}</small>}
                 </button>
-              ))}
+                );
+              })}
             </div>
             <div className="indicatorRows">
-              <div className="indicatorRow">
-                <span className="drag">⋮⋮</span>
-                <b>SMA 快线</b>
-                <Field label="周期">
-                  <input
-                    type="number"
-                    min="2"
-                    value={form.fast}
-                    onChange={(e) => update("fast", +e.target.value)}
-                  />
-                </Field>
-                <span className="sourceChip">收盘价</span>
-              </div>
-              <div className="indicatorRow">
-                <span className="drag">⋮⋮</span>
-                <b>SMA 慢线</b>
-                <Field label="周期">
-                  <input
-                    type="number"
-                    min="3"
-                    value={form.slow}
-                    onChange={(e) => update("slow", +e.target.value)}
-                  />
-                </Field>
-                <span className="sourceChip">收盘价</span>
-              </div>
+              {form.indicators.map((indicator, index) => (
+                <IndicatorEditor
+                  key={indicator.id}
+                  indicator={indicator}
+                  index={index}
+                  onChange={(patch) => changeIndicator(indicator.id, patch)}
+                  onRemove={() => removeIndicator(indicator.id)}
+                />
+              ))}
+              {!form.indicators.length && (
+                <div className="configEmpty">点击上方按钮新增技术指标</div>
+              )}
             </div>
           </FormSection>
           <FormSection no="04" title="买入与卖出规则">
             <div className="rulesGrid">
-              <div className="ruleBox entry">
-                <div>
-                  <span>买入条件</span>
-                  <b>全部满足 AND</b>
-                </div>
-                <p>
-                  <strong>SMA {form.fast}</strong>
-                  <em>上穿</em>
-                  <strong>SMA {form.slow}</strong>
-                </p>
-                <button>＋ 添加条件</button>
-              </div>
-              <div className="ruleBox exit">
-                <div>
-                  <span>卖出条件</span>
-                  <b>任一满足 OR</b>
-                </div>
-                <p>
-                  <strong>SMA {form.fast}</strong>
-                  <em>下穿</em>
-                  <strong>SMA {form.slow}</strong>
-                </p>
-                <button>＋ 添加条件</button>
-              </div>
+              <RuleGroupEditor
+                kind="entry"
+                title="买入条件"
+                group={form.entryRule}
+                indicators={form.indicators}
+                onChange={(group) => update("entryRule", group)}
+              />
+              <RuleGroupEditor
+                kind="exit"
+                title="卖出条件"
+                group={form.exitRule}
+                indicators={form.indicators}
+                onChange={(group) => update("exitRule", group)}
+              />
             </div>
           </FormSection>
           <FormSection no="05" title="仓位与风控">
@@ -742,7 +841,7 @@ function Editor({
             <div>
               <dt>策略</dt>
               <dd>
-                SMA {form.fast} / {form.slow}
+                {form.indicators.length} 个指标 · {form.entryRule.conditions.length + form.exitRule.conditions.length} 个条件
                 <small>T+1 开盘成交</small>
               </dd>
             </div>
@@ -751,15 +850,14 @@ function Editor({
               <dd>{form.dataMode === "sample" ? "固定种子样本" : "AKShare"}</dd>
             </div>
           </dl>
-          {form.fast >= form.slow && (
-            <p className="fieldError">快线周期必须小于慢线周期</p>
-          )}
+          <p className="summaryIndicators">{indicatorSummary}</p>
+          {strategyError && <p className="fieldError">{strategyError}</p>}
           {!instrumentReady && (
             <p className="fieldError">请先输入并识别有效的证券代码</p>
           )}
           <button
             className="primaryBtn runButton"
-            disabled={form.fast >= form.slow || !instrumentReady}
+            disabled={Boolean(strategyError) || !instrumentReady}
             onClick={onRun}
           >
             开始回测 <span>→</span>
@@ -769,6 +867,295 @@ function Editor({
         </aside>
       </section>
     </main>
+  );
+}
+
+function IndicatorEditor({
+  indicator,
+  index,
+  onChange,
+  onRemove,
+}: {
+  indicator: IndicatorConfig;
+  index: number;
+  onChange: (patch: Partial<IndicatorConfig>) => void;
+  onRemove: () => void;
+}) {
+  const setParam = (name: string, value: number) =>
+    onChange({ params: { ...indicator.params, [name]: value } });
+  const sourceLabels = {
+    open: "开盘价",
+    high: "最高价",
+    low: "最低价",
+    close: "收盘价",
+    volume: "成交量",
+  } as const;
+  return (
+    <div className="indicatorRow">
+      <span className="indicatorOrder">{String(index + 1).padStart(2, "0")}</span>
+      <div className="indicatorIdentity">
+        <b>{indicatorNames[indicator.type]}</b>
+        <small>{indicatorLabel(indicator)}</small>
+      </div>
+      <div className="indicatorParams">
+        {indicator.type === "macd" ? (
+          <>
+            <label>
+              <span>快线</span>
+              <input
+                aria-label={`${indicatorNames[indicator.type]} 快线周期`}
+                type="number"
+                min="2"
+                value={indicator.params.fast_period}
+                onChange={(event) =>
+                  setParam("fast_period", +event.target.value)
+                }
+              />
+            </label>
+            <label>
+              <span>慢线</span>
+              <input
+                aria-label={`${indicatorNames[indicator.type]} 慢线周期`}
+                type="number"
+                min="3"
+                value={indicator.params.slow_period}
+                onChange={(event) =>
+                  setParam("slow_period", +event.target.value)
+                }
+              />
+            </label>
+            <label>
+              <span>信号</span>
+              <input
+                aria-label={`${indicatorNames[indicator.type]} 信号周期`}
+                type="number"
+                min="2"
+                value={indicator.params.signal_period}
+                onChange={(event) =>
+                  setParam("signal_period", +event.target.value)
+                }
+              />
+            </label>
+          </>
+        ) : (
+          <label>
+            <span>周期</span>
+            <input
+              aria-label={`${indicatorNames[indicator.type]} 周期`}
+              type="number"
+              min="2"
+              value={indicator.params.period}
+              onChange={(event) => setParam("period", +event.target.value)}
+            />
+          </label>
+        )}
+        {indicator.type === "bollinger" && (
+          <label>
+            <span>标准差</span>
+            <input
+              aria-label="布林带标准差倍数"
+              type="number"
+              min="0.1"
+              step="0.1"
+              value={indicator.params.standard_deviation}
+              onChange={(event) =>
+                setParam("standard_deviation", +event.target.value)
+              }
+            />
+          </label>
+        )}
+      </div>
+      <label className="sourceSelect">
+        <span>数据源</span>
+        <select
+          aria-label={`${indicatorNames[indicator.type]} 数据源`}
+          value={indicator.source}
+          disabled={indicator.type === "volume_ma"}
+          onChange={(event) =>
+            onChange({ source: event.target.value as IndicatorConfig["source"] })
+          }
+        >
+          {Object.entries(sourceLabels).map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <button
+        type="button"
+        className="removeConfig"
+        aria-label={`删除 ${indicatorLabel(indicator)}`}
+        onClick={onRemove}
+      >
+        删除
+      </button>
+    </div>
+  );
+}
+
+function RuleGroupEditor({
+  kind,
+  title,
+  group,
+  indicators,
+  onChange,
+}: {
+  kind: "entry" | "exit";
+  title: string;
+  group: RuleGroupConfig;
+  indicators: IndicatorConfig[];
+  onChange: (group: RuleGroupConfig) => void;
+}) {
+  const addCondition = () => {
+    if (!indicators.length) return;
+    const rightIndicator = indicators[1];
+    const condition: RuleConditionConfig = {
+      id: nextConfigId(kind),
+      left: indicators[0].id,
+      comparison: rightIndicator
+        ? kind === "entry"
+          ? "cross_above"
+          : "cross_below"
+        : kind === "entry"
+          ? "greater_than"
+          : "less_than",
+      rightMode: rightIndicator ? "indicator" : "value",
+      right: rightIndicator?.id ?? (kind === "entry" ? 50 : 30),
+    };
+    onChange({ ...group, conditions: [...group.conditions, condition] });
+  };
+  const changeCondition = (
+    id: string,
+    patch: Partial<RuleConditionConfig>,
+  ) =>
+    onChange({
+      ...group,
+      conditions: group.conditions.map((condition) =>
+        condition.id === id ? { ...condition, ...patch } : condition,
+      ),
+    });
+  const removeCondition = (id: string) =>
+    onChange({
+      ...group,
+      conditions: group.conditions.filter((condition) => condition.id !== id),
+    });
+  return (
+    <div className={`ruleBox ${kind}`}>
+      <div className="ruleHeader">
+        <span>{title}</span>
+        <label>
+          <span>组合方式</span>
+          <select
+            aria-label={`${title}组合方式`}
+            value={group.operator}
+            onChange={(event) =>
+              onChange({
+                ...group,
+                operator: event.target.value as RuleGroupConfig["operator"],
+              })
+            }
+          >
+            <option value="and">全部满足 AND</option>
+            <option value="or">任一满足 OR</option>
+          </select>
+        </label>
+      </div>
+      <div className="conditionList">
+        {group.conditions.map((condition, index) => (
+          <div className="conditionRow" key={condition.id}>
+            <span className="conditionNumber">{index + 1}</span>
+            <select
+              aria-label={`${title} ${index + 1} 左侧指标`}
+              value={condition.left}
+              onChange={(event) =>
+                changeCondition(condition.id, { left: event.target.value })
+              }
+            >
+              {indicators.map((indicator) => (
+                <option value={indicator.id} key={indicator.id}>
+                  {indicatorLabel(indicator)}
+                </option>
+              ))}
+            </select>
+            <select
+              aria-label={`${title} ${index + 1} 比较方式`}
+              value={condition.comparison}
+              onChange={(event) =>
+                changeCondition(condition.id, {
+                  comparison: event.target.value as Comparison,
+                })
+              }
+            >
+              {Object.entries(comparisonLabels).map(([value, label]) => (
+                <option value={value} key={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+            <select
+              className="operandMode"
+              aria-label={`${title} ${index + 1} 右侧类型`}
+              value={condition.rightMode}
+              onChange={(event) => {
+                const mode = event.target.value as RuleConditionConfig["rightMode"];
+                changeCondition(condition.id, {
+                  rightMode: mode,
+                  right: mode === "indicator" ? indicators[0]?.id || "" : 0,
+                });
+              }}
+            >
+              <option value="indicator">指标</option>
+              <option value="value">数值</option>
+            </select>
+            {condition.rightMode === "indicator" ? (
+              <select
+                aria-label={`${title} ${index + 1} 右侧指标`}
+                value={String(condition.right)}
+                onChange={(event) =>
+                  changeCondition(condition.id, { right: event.target.value })
+                }
+              >
+                {indicators.map((indicator) => (
+                  <option value={indicator.id} key={indicator.id}>
+                    {indicatorLabel(indicator)}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                aria-label={`${title} ${index + 1} 比较数值`}
+                type="number"
+                step="0.1"
+                value={Number(condition.right)}
+                onChange={(event) =>
+                  changeCondition(condition.id, { right: +event.target.value })
+                }
+              />
+            )}
+            <button
+              type="button"
+              className="removeCondition"
+              aria-label={`删除${title} ${index + 1}`}
+              onClick={() => removeCondition(condition.id)}
+            >
+              ×
+            </button>
+          </div>
+        ))}
+        {!group.conditions.length && (
+          <div className="conditionEmpty">尚未设置{title}</div>
+        )}
+      </div>
+      <button
+        type="button"
+        className="addCondition"
+        disabled={!indicators.length}
+        onClick={addCondition}
+      >
+        ＋ 新增{title}
+      </button>
+    </div>
   );
 }
 
@@ -821,7 +1208,7 @@ function Report({ result, form }: { result: BacktestResult; form: FormState }) {
           <span className="eyebrow">
             BACKTEST REPORT · STRATEGY V{result.strategy_version}
           </span>
-          <h1>{result.instrument_name || result.symbol} · 双均线策略</h1>
+          <h1>{result.instrument_name || result.symbol} · 可视化技术策略</h1>
           <p>
             {form.startDate} — {form.endDate} · 数据快照{" "}
             {new Date(result.data_snapshot_time).toLocaleString("zh-CN")}
@@ -1027,7 +1414,7 @@ function History({
                 <span className="instrumentIcon">3E</span>
                 <div>
                   <b>{row.instrument_name || row.symbol}</b>
-                  <small>双均线趋势策略 · V{row.strategy_version}</small>
+                  <small>可视化技术策略 · V{row.strategy_version}</small>
                 </div>
               </div>
               <span className="successPill">
