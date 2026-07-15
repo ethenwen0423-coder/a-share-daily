@@ -41,8 +41,13 @@ test("product source exposes editor, report, risk and reproducibility surfaces",
   assert.match(app, /RuleGroupEditor/);
   assert.match(app, /removeIndicator|删除.*指标/);
   assert.match(app, /removeCondition|删除.*条件/);
+  for (const feature of ["WMA", "ATR", "ROC", "CCI", "威廉指标", "OBV", "大于等于", "小于等于", "不等于"]) assert.match(app, new RegExp(feature));
+  assert.match(app, /取消回测并修改策略/);
+  assert.match(app, /返回修改策略/);
+  assert.match(app, /runSequence/);
   assert.match(client, /indicators: form\.indicators/);
   assert.match(client, /entry_rule: serializeRule/);
   assert.match(demoEngine, /calculateIndicator/);
+  assert.match(demoEngine, /wmaSeries|atrSeries|rocSeries|cciSeries|williamsRSeries|obvSeries/);
   assert.match(demoEngine, /evaluateGroup\(form\.entryRule/);
 });

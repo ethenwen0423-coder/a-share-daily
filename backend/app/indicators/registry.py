@@ -29,6 +29,16 @@ def ema(df: pd.DataFrame, spec: IndicatorSpec) -> tuple[pd.DataFrame, str]:
     return df, column
 
 
+def wma(df: pd.DataFrame, spec: IndicatorSpec) -> tuple[pd.DataFrame, str]:
+    period = _period(spec.params)
+    weights = np.arange(1, period + 1, dtype=float)
+    column = f"wma_{period}_{spec.source}"
+    df[column] = df[spec.source].rolling(period, min_periods=period).apply(
+        lambda values: float(np.dot(values, weights) / weights.sum()), raw=True
+    )
+    return df, column
+
+
 def rsi(df: pd.DataFrame, spec: IndicatorSpec) -> tuple[pd.DataFrame, str]:
     period = _period(spec.params)
     delta = df[spec.source].diff()
@@ -70,6 +80,59 @@ def bollinger(df: pd.DataFrame, spec: IndicatorSpec) -> tuple[pd.DataFrame, str]
     return df, f"{prefix}_middle"
 
 
+def atr(df: pd.DataFrame, spec: IndicatorSpec) -> tuple[pd.DataFrame, str]:
+    period = _period(spec.params)
+    previous_close = df["close"].shift(1)
+    true_range = pd.concat(
+        [
+            df["high"] - df["low"],
+            (df["high"] - previous_close).abs(),
+            (df["low"] - previous_close).abs(),
+        ],
+        axis=1,
+    ).max(axis=1)
+    column = f"atr_{period}"
+    df[column] = true_range.ewm(alpha=1 / period, adjust=False, min_periods=period).mean()
+    return df, column
+
+
+def roc(df: pd.DataFrame, spec: IndicatorSpec) -> tuple[pd.DataFrame, str]:
+    period = _period(spec.params)
+    column = f"roc_{period}_{spec.source}"
+    previous = df[spec.source].shift(period).replace(0, np.nan)
+    df[column] = (df[spec.source] / previous - 1) * 100
+    return df, column
+
+
+def cci(df: pd.DataFrame, spec: IndicatorSpec) -> tuple[pd.DataFrame, str]:
+    period = _period(spec.params)
+    typical_price = (df["high"] + df["low"] + df["close"]) / 3
+    average = typical_price.rolling(period, min_periods=period).mean()
+    mean_deviation = typical_price.rolling(period, min_periods=period).apply(
+        lambda values: float(np.mean(np.abs(values - np.mean(values)))), raw=True
+    )
+    column = f"cci_{period}"
+    df[column] = (typical_price - average) / (0.015 * mean_deviation.replace(0, np.nan))
+    return df, column
+
+
+def williams_r(df: pd.DataFrame, spec: IndicatorSpec) -> tuple[pd.DataFrame, str]:
+    period = _period(spec.params)
+    highest = df["high"].rolling(period, min_periods=period).max()
+    lowest = df["low"].rolling(period, min_periods=period).min()
+    spread = (highest - lowest).replace(0, np.nan)
+    column = f"williams_r_{period}"
+    df[column] = -100 * (highest - df["close"]) / spread
+    return df, column
+
+
+def obv(df: pd.DataFrame, spec: IndicatorSpec) -> tuple[pd.DataFrame, str]:
+    column = "obv"
+    direction = np.sign(df["close"].diff()).fillna(0)
+    df[column] = (direction * df["volume"]).cumsum()
+    return df, column
+
+
 def volume_ma(df: pd.DataFrame, spec: IndicatorSpec) -> tuple[pd.DataFrame, str]:
     period = _period(spec.params)
     column = f"volume_ma_{period}"
@@ -78,7 +141,18 @@ def volume_ma(df: pd.DataFrame, spec: IndicatorSpec) -> tuple[pd.DataFrame, str]
 
 
 INDICATOR_REGISTRY: dict[str, Callable[[pd.DataFrame, IndicatorSpec], tuple[pd.DataFrame, str]]] = {
-    "sma": sma, "ema": ema, "rsi": rsi, "macd": macd, "bollinger": bollinger, "volume_ma": volume_ma,
+    "sma": sma,
+    "ema": ema,
+    "wma": wma,
+    "rsi": rsi,
+    "macd": macd,
+    "bollinger": bollinger,
+    "atr": atr,
+    "roc": roc,
+    "cci": cci,
+    "williams_r": williams_r,
+    "obv": obv,
+    "volume_ma": volume_ma,
 }
 
 

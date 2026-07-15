@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import pytest
 
 from app.indicators.registry import apply_indicators
 from app.schemas.strategy import IndicatorSpec
@@ -28,7 +29,18 @@ def test_all_indicator_types_register_without_future_fill():
         IndicatorSpec(id="m", type="macd", params={"fast_period": 5, "slow_period": 10, "signal_period": 4}),
         IndicatorSpec(id="b", type="bollinger", params={"period": 10, "standard_deviation": 2}),
         IndicatorSpec(id="v", type="volume_ma", params={"period": 5}, source="volume"),
+        IndicatorSpec(id="w", type="wma", params={"period": 5}),
+        IndicatorSpec(id="a", type="atr", params={"period": 5}),
+        IndicatorSpec(id="roc", type="roc", params={"period": 5}),
+        IndicatorSpec(id="c", type="cci", params={"period": 5}),
+        IndicatorSpec(id="wr", type="williams_r", params={"period": 5}),
+        IndicatorSpec(id="o", type="obv", params={}),
     ]
     result, aliases = apply_indicators(bars(), specs)
-    assert set(aliases) == {"e", "m", "b", "v"}
+    assert set(aliases) == {"e", "m", "b", "v", "w", "a", "roc", "c", "wr", "o"}
     assert result["e"].iloc[:4].isna().all()
+    assert result["w"].iloc[-1] == pytest.approx(28.6666667)
+    assert result["a"].iloc[-1] > 0
+    assert result["roc"].iloc[-1] > 0
+    assert -100 <= result["wr"].iloc[-1] <= 0
+    assert result["o"].iloc[-1] > 0

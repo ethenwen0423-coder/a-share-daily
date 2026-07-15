@@ -8,7 +8,10 @@ from pydantic import BaseModel, Field, model_validator
 
 class IndicatorSpec(BaseModel):
     id: str = Field(pattern=r"^[a-zA-Z][a-zA-Z0-9_]{0,39}$")
-    type: Literal["sma", "ema", "macd", "rsi", "bollinger", "volume_ma"]
+    type: Literal[
+        "sma", "ema", "macd", "rsi", "bollinger", "volume_ma",
+        "wma", "atr", "roc", "cci", "williams_r", "obv",
+    ]
     params: dict[str, float | int]
     source: Literal["open", "high", "low", "close", "volume"] = "close"
 
@@ -18,7 +21,10 @@ Operand = str | float | int
 
 class Condition(BaseModel):
     left: Operand
-    comparison: Literal["greater_than", "less_than", "equal", "cross_above", "cross_below"]
+    comparison: Literal[
+        "greater_than", "greater_or_equal", "less_than", "less_or_equal",
+        "equal", "not_equal", "cross_above", "cross_below",
+    ]
     right: Operand
 
 

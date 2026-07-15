@@ -73,6 +73,18 @@ const emaSeries = (values: number[], period: number): NullableSeries => {
   });
 };
 
+const wmaSeries = (values: number[], period: number): NullableSeries => {
+  const result: NullableSeries = Array(values.length).fill(null);
+  const denominator = (period * (period + 1)) / 2;
+  for (let index = period - 1; index < values.length; index += 1) {
+    let weighted = 0;
+    for (let offset = 0; offset < period; offset += 1)
+      weighted += values[index - period + 1 + offset] * (offset + 1);
+    result[index] = weighted / denominator;
+  }
+  return result;
+};
+
 const rsiSeries = (values: number[], period: number): NullableSeries => {
   const result: NullableSeries = Array(values.length).fill(null);
   let averageGain = 0;
@@ -97,6 +109,73 @@ const rsiSeries = (values: number[], period: number): NullableSeries => {
   return result;
 };
 
+const atrSeries = (bars: Bar[], period: number): NullableSeries => {
+  const result: NullableSeries = Array(bars.length).fill(null);
+  let smoothed = 0;
+  for (let index = 0; index < bars.length; index += 1) {
+    const bar = bars[index];
+    const previousClose = index > 0 ? bars[index - 1].close : bar.close;
+    const trueRange = Math.max(
+      bar.high - bar.low,
+      Math.abs(bar.high - previousClose),
+      Math.abs(bar.low - previousClose),
+    );
+    if (index < period) smoothed += trueRange / period;
+    else smoothed = (smoothed * (period - 1) + trueRange) / period;
+    if (index >= period - 1) result[index] = smoothed;
+  }
+  return result;
+};
+
+const rocSeries = (values: number[], period: number): NullableSeries =>
+  values.map((value, index) =>
+    index < period || values[index - period] === 0
+      ? null
+      : (value / values[index - period] - 1) * 100,
+  );
+
+const cciSeries = (bars: Bar[], period: number): NullableSeries => {
+  const typical = bars.map((bar) => (bar.high + bar.low + bar.close) / 3);
+  const result: NullableSeries = Array(bars.length).fill(null);
+  for (let index = period - 1; index < typical.length; index += 1) {
+    const window = typical.slice(index - period + 1, index + 1);
+    const average = window.reduce((sum, value) => sum + value, 0) / period;
+    const deviation =
+      window.reduce((sum, value) => sum + Math.abs(value - average), 0) /
+      period;
+    result[index] = deviation === 0 ? null : (typical[index] - average) / (0.015 * deviation);
+  }
+  return result;
+};
+
+const williamsRSeries = (bars: Bar[], period: number): NullableSeries => {
+  const result: NullableSeries = Array(bars.length).fill(null);
+  for (let index = period - 1; index < bars.length; index += 1) {
+    const window = bars.slice(index - period + 1, index + 1);
+    const highest = Math.max(...window.map((bar) => bar.high));
+    const lowest = Math.min(...window.map((bar) => bar.low));
+    result[index] =
+      highest === lowest
+        ? null
+        : (-100 * (highest - bars[index].close)) / (highest - lowest);
+  }
+  return result;
+};
+
+const obvSeries = (bars: Bar[]): NullableSeries => {
+  let value = 0;
+  return bars.map((bar, index) => {
+    if (index > 0)
+      value +=
+        bar.close > bars[index - 1].close
+          ? bar.volume
+          : bar.close < bars[index - 1].close
+            ? -bar.volume
+            : 0;
+    return value;
+  });
+};
+
 function calculateIndicator(bars: Bar[], indicator: IndicatorConfig) {
   const values = bars.map((bar) => bar[indicator.source]);
   if (indicator.type === "sma" || indicator.type === "volume_ma")
@@ -106,10 +185,21 @@ function calculateIndicator(bars: Bar[], indicator: IndicatorConfig) {
     );
   if (indicator.type === "ema")
     return emaSeries(values, indicator.params.period);
+  if (indicator.type === "wma")
+    return wmaSeries(values, indicator.params.period);
   if (indicator.type === "rsi")
     return rsiSeries(values, indicator.params.period);
   if (indicator.type === "bollinger")
     return smaSeries(values, indicator.params.period);
+  if (indicator.type === "atr")
+    return atrSeries(bars, indicator.params.period);
+  if (indicator.type === "roc")
+    return rocSeries(values, indicator.params.period);
+  if (indicator.type === "cci")
+    return cciSeries(bars, indicator.params.period);
+  if (indicator.type === "williams_r")
+    return williamsRSeries(bars, indicator.params.period);
+  if (indicator.type === "obv") return obvSeries(bars);
   const fast = emaSeries(values, indicator.params.fast_period);
   const slow = emaSeries(values, indicator.params.slow_period);
   return values.map((_, index) =>
@@ -127,8 +217,11 @@ function compare(
   previousRight: number | null,
 ) {
   if (comparison === "greater_than") return left > right;
+  if (comparison === "greater_or_equal") return left >= right;
   if (comparison === "less_than") return left < right;
+  if (comparison === "less_or_equal") return left <= right;
   if (comparison === "equal") return Math.abs(left - right) < 1e-9;
+  if (comparison === "not_equal") return Math.abs(left - right) >= 1e-9;
   if (previousLeft === null || previousRight === null) return false;
   if (comparison === "cross_above")
     return previousLeft <= previousRight && left > right;
@@ -172,7 +265,9 @@ export function runDemoBacktest(form: FormState): BacktestResult {
     ...form.indicators.map((indicator) =>
       indicator.type === "macd"
         ? indicator.params.slow_period + indicator.params.signal_period
-        : indicator.params.period,
+        : indicator.type === "obv"
+          ? 2
+          : indicator.params.period,
     ),
   );
   if (bars.length < warmup + 3)

@@ -704,6 +704,16 @@ button {
 .indicatorParams input {
   width: 76px;
 }
+.indicatorStaticParam {
+  display: inline-flex;
+  align-items: center;
+  min-height: 42px;
+  padding: 0 11px;
+  border-radius: 8px;
+  background: #f1f3f7;
+  color: var(--muted);
+  font-size: 12px;
+}
 .sourceSelect select {
   width: 100px;
 }
@@ -960,6 +970,11 @@ button {
 }
 .runningCard .primaryBtn {
   margin-top: 28px;
+}
+.runningCancel {
+  margin-top: 28px;
+  min-height: 44px;
+  padding: 11px 16px;
 }
 .reportHead {
   align-items: center;
@@ -1492,6 +1507,10 @@ td {
   }
   .reportGrid {
     grid-template-columns: 1fr;
+  }
+  .reportActions {
+    width: 100%;
+    flex-wrap: wrap;
   }
   .chartPanel.wide {
     grid-column: auto;

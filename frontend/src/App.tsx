@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { runApiBacktest, searchInstruments } from "./api/client";
 import EquityChart from "./components/EquityChart";
 import type {
@@ -27,14 +27,23 @@ const indicatorOptions: { type: IndicatorType; label: string }[] = [
   { type: "rsi", label: "RSI" },
   { type: "bollinger", label: "布林带" },
   { type: "volume_ma", label: "成交量均线" },
+  { type: "wma", label: "WMA" },
+  { type: "atr", label: "ATR" },
+  { type: "roc", label: "ROC" },
+  { type: "cci", label: "CCI" },
+  { type: "williams_r", label: "威廉指标" },
+  { type: "obv", label: "OBV" },
 ];
 const indicatorNames: Record<IndicatorType, string> = Object.fromEntries(
   indicatorOptions.map((item) => [item.type, item.label]),
 ) as Record<IndicatorType, string>;
 const comparisonLabels: Record<Comparison, string> = {
   greater_than: "大于",
+  greater_or_equal: "大于等于",
   less_than: "小于",
+  less_or_equal: "小于等于",
   equal: "等于",
+  not_equal: "不等于",
   cross_above: "上穿",
   cross_below: "下穿",
 };
@@ -100,19 +109,31 @@ const indicatorLabel = (indicator: IndicatorConfig) => {
     return `${name}(${indicator.params.fast_period},${indicator.params.slow_period},${indicator.params.signal_period})`;
   if (indicator.type === "bollinger")
     return `${name}(${indicator.params.period}, ${indicator.params.standard_deviation}σ)`;
+  if (indicator.type === "obv") return name;
   return `${name}(${indicator.params.period})`;
 };
-const indicatorDefaults = (type: IndicatorType): IndicatorConfig => ({
-  id: nextConfigId(type),
-  type,
-  source: type === "volume_ma" ? "volume" : "close",
-  params:
-    type === "macd"
-      ? { fast_period: 12, slow_period: 26, signal_period: 9 }
-      : type === "bollinger"
-        ? { period: 20, standard_deviation: 2 }
-        : { period: type === "rsi" ? 14 : 20 },
-});
+const indicatorDefaults = (type: IndicatorType): IndicatorConfig => {
+  const periods: Partial<Record<IndicatorType, number>> = {
+    rsi: 14,
+    atr: 14,
+    roc: 12,
+    cci: 20,
+    williams_r: 14,
+  };
+  return {
+    id: nextConfigId(type),
+    type,
+    source: type === "volume_ma" ? "volume" : "close",
+    params:
+      type === "macd"
+        ? { fast_period: 12, slow_period: 26, signal_period: 9 }
+        : type === "bollinger"
+          ? { period: 20, standard_deviation: 2 }
+          : type === "obv"
+            ? {}
+            : { period: periods[type] ?? 20 },
+  };
+};
 
 export default function App() {
   const [page, setPage] = useState<Page>("home");
@@ -122,18 +143,31 @@ export default function App() {
   const [progress, setProgress] = useState(0);
   const [statusText, setStatusText] = useState("");
   const [error, setError] = useState("");
+  const runSequence = useRef(0);
   const go = (p: Page) => {
     setPage(p);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
+  const cancelRun = (destination: Page = "editor") => {
+    runSequence.current += 1;
+    setProgress(0);
+    setStatusText("");
+    setError("");
+    go(destination);
+  };
+  const navigate = (destination: Page) =>
+    page === "running" ? cancelRun(destination) : go(destination);
   const update = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));
   const run = async () => {
+    const sequence = ++runSequence.current;
+    const cancelled = () => sequence !== runSequence.current;
     setError("");
     setProgress(12);
     setStatusText("正在校验策略参数");
     go("running");
     await new Promise((r) => setTimeout(r, 250));
+    if (cancelled()) return;
     setProgress(38);
     setStatusText(
       form.dataMode === "akshare"
@@ -141,6 +175,7 @@ export default function App() {
         : "正在载入固定种子模拟行情",
     );
     await new Promise((r) => setTimeout(r, 300));
+    if (cancelled()) return;
     setProgress(68);
     setStatusText("正在逐日计算信号、成本和资产曲线");
     try {
@@ -151,14 +186,17 @@ export default function App() {
         if (form.dataMode === "akshare") throw e;
         next = runDemoBacktest(form);
       }
+      if (cancelled()) return;
       setProgress(92);
       setStatusText("正在计算绩效指标并生成报告");
       await new Promise((r) => setTimeout(r, 260));
+      if (cancelled()) return;
       setResult(next);
       setHistory((prev) => [{ ...next, id: next.id || Date.now() }, ...prev]);
       setProgress(100);
       go("report");
     } catch (e) {
+      if (cancelled()) return;
       setError(e instanceof Error ? e.message : "回测失败");
       setProgress(100);
     }
@@ -167,7 +205,7 @@ export default function App() {
   return (
     <div className="appShell">
       <aside className="sidebar">
-        <button className="logo" onClick={() => go("home")}>
+        <button className="logo" onClick={() => navigate("home")}>
           <span>Q</span>
           <div>
             <b>量化策略实验室</b>
@@ -183,7 +221,7 @@ export default function App() {
             <button
               key={id}
               className={page === id ? "active" : ""}
-              onClick={() => go(id)}
+              onClick={() => navigate(id)}
             >
               <span>{icon}</span>
               {label}
@@ -221,11 +259,13 @@ export default function App() {
               <i />
               研究服务就绪
             </span>
-            <button className="ghostBtn" onClick={() => go("history")}>
+            <button className="ghostBtn" onClick={() => navigate("history")}>
               历史记录
             </button>
-            <button className="primaryBtn" onClick={() => go("editor")}>
-              ＋ 新建回测
+            <button className="primaryBtn" onClick={() => navigate("editor")}>
+              {page === "running" || page === "report"
+                ? "← 修改策略"
+                : "＋ 新建回测"}
             </button>
           </div>
         </header>
@@ -248,10 +288,13 @@ export default function App() {
             progress={progress}
             text={statusText}
             error={error}
-            onRetry={() => go("editor")}
+            onRetry={() => cancelRun("editor")}
+            onCancel={() => cancelRun("editor")}
           />
         )}
-        {page === "report" && result && <Report result={result} form={form} />}
+        {page === "report" && result && (
+          <Report result={result} form={form} onEdit={() => go("editor")} />
+        )}
         {page === "report" && !result && (
           <Empty title="还没有可查看的报告" action={() => go("editor")} />
         )}
@@ -890,6 +933,14 @@ function IndicatorEditor({
     close: "收盘价",
     volume: "成交量",
   } as const;
+  const lockedSourceLabels: Partial<Record<IndicatorType, string>> = {
+    volume_ma: "成交量",
+    atr: "最高/最低/收盘",
+    cci: "最高/最低/收盘",
+    williams_r: "最高/最低/收盘",
+    obv: "收盘价 + 成交量",
+  };
+  const lockedSourceLabel = lockedSourceLabels[indicator.type];
   return (
     <div className="indicatorRow">
       <span className="indicatorOrder">{String(index + 1).padStart(2, "0")}</span>
@@ -937,6 +988,8 @@ function IndicatorEditor({
               />
             </label>
           </>
+        ) : indicator.type === "obv" ? (
+          <span className="indicatorStaticParam">累计量价指标，无需周期参数</span>
         ) : (
           <label>
             <span>周期</span>
@@ -970,16 +1023,20 @@ function IndicatorEditor({
         <select
           aria-label={`${indicatorNames[indicator.type]} 数据源`}
           value={indicator.source}
-          disabled={indicator.type === "volume_ma"}
+          disabled={Boolean(lockedSourceLabel)}
           onChange={(event) =>
             onChange({ source: event.target.value as IndicatorConfig["source"] })
           }
         >
-          {Object.entries(sourceLabels).map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
+          {lockedSourceLabel ? (
+            <option value={indicator.source}>{lockedSourceLabel}</option>
+          ) : (
+            Object.entries(sourceLabels).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))
+          )}
         </select>
       </label>
       <button
@@ -1164,11 +1221,13 @@ function Running({
   text,
   error,
   onRetry,
+  onCancel,
 }: {
   progress: number;
   text: string;
   error: string;
   onRetry: () => void;
+  onCancel: () => void;
 }) {
   return (
     <main className="content runningPage">
@@ -1194,12 +1253,25 @@ function Running({
             返回修改参数
           </button>
         )}
+        {!error && (
+          <button className="ghostBtn runningCancel" onClick={onCancel}>
+            ← 取消回测并修改策略
+          </button>
+        )}
       </div>
     </main>
   );
 }
 
-function Report({ result, form }: { result: BacktestResult; form: FormState }) {
+function Report({
+  result,
+  form,
+  onEdit,
+}: {
+  result: BacktestResult;
+  form: FormState;
+  onEdit: () => void;
+}) {
   const m = result.metrics;
   return (
     <main className="content reportPage">
@@ -1215,6 +1287,9 @@ function Report({ result, form }: { result: BacktestResult; form: FormState }) {
           </p>
         </div>
         <div className="reportActions">
+          <button className="primaryBtn" onClick={onEdit}>
+            ← 返回修改策略
+          </button>
           <button className="ghostBtn" onClick={() => window.print()}>
             打印报告
           </button>

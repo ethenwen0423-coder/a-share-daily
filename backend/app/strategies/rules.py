@@ -23,10 +23,16 @@ def evaluate_condition(current: pd.Series, previous: pd.Series | None, condition
         return False
     if condition.comparison == "greater_than":
         return left > right
+    if condition.comparison == "greater_or_equal":
+        return left >= right
     if condition.comparison == "less_than":
         return left < right
+    if condition.comparison == "less_or_equal":
+        return left <= right
     if condition.comparison == "equal":
         return math.isclose(left, right, rel_tol=1e-9, abs_tol=1e-12)
+    if condition.comparison == "not_equal":
+        return not math.isclose(left, right, rel_tol=1e-9, abs_tol=1e-12)
     if previous is None:
         return False
     prev_left = _value(previous, condition.left)

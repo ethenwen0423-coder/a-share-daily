@@ -22,6 +22,14 @@ def test_and_or_group():
     assert evaluate_group(row, None, or_group)
 
 
+def test_extended_comparisons():
+    row = pd.Series({"x": 10.0, "y": 10.0})
+    assert evaluate_condition(row, None, Condition(left="x", comparison="greater_or_equal", right=10))
+    assert evaluate_condition(row, None, Condition(left="x", comparison="less_or_equal", right=10))
+    assert evaluate_condition(row, None, Condition(left="x", comparison="not_equal", right=9))
+    assert not evaluate_condition(row, None, Condition(left="x", comparison="not_equal", right="y"))
+
+
 def test_missing_field_is_rejected():
     with pytest.raises(ValueError, match="不存在的字段"):
         evaluate_condition(pd.Series({"x": 1}), None, Condition(left="bad", comparison="greater_than", right=0))

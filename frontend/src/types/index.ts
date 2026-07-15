@@ -57,7 +57,13 @@ export type IndicatorType =
   | "macd"
   | "rsi"
   | "bollinger"
-  | "volume_ma";
+  | "volume_ma"
+  | "wma"
+  | "atr"
+  | "roc"
+  | "cci"
+  | "williams_r"
+  | "obv";
 export type PriceSource = "open" | "high" | "low" | "close" | "volume";
 export type IndicatorConfig = {
   id: string;
@@ -67,8 +73,11 @@ export type IndicatorConfig = {
 };
 export type Comparison =
   | "greater_than"
+  | "greater_or_equal"
   | "less_than"
+  | "less_or_equal"
   | "equal"
+  | "not_equal"
   | "cross_above"
   | "cross_below";
 export type RuleConditionConfig = {
