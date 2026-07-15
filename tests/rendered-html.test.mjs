@@ -27,6 +27,9 @@ test("product source exposes editor, report, risk and reproducibility surfaces",
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
   ]);
   for (const phrase of ["技术指标", "买入与卖出规则", "回测报告", "完整交易明细", "需进一步核验", "不构成投资建议"]) assert.match(app, new RegExp(phrase));
-  assert.match(styles, /@media\(max-width:760px\)/);
+  assert.match(styles, /@media\s*\(max-width:\s*760px\)/);
   assert.match(layout, /量化策略实验室/);
+  assert.match(app, /searchInstruments/);
+  assert.match(app, /输入代码后将自动带出名称和资产类型/);
+  assert.match(app, /该代码对应多个标的，请确认/);
 });

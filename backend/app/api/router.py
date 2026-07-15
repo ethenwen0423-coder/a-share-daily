@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.core.database import get_db
 from app.data.providers import AkShareMarketDataProvider, MarketDataError
+from app.data.instruments import lookup_instruments
 from app.indicators.registry import INDICATOR_REGISTRY
 from app.models.entities import BacktestRun, EquityPoint, Instrument, Strategy, StrategyVersion, Trade
 from app.schemas.strategy import BacktestRequest, DOUBLE_MA_STRATEGY, StrategyCreate
@@ -26,12 +27,16 @@ def search_instruments(q: str = Query("", max_length=30), db: Session = Depends(
         {"symbol": "510300", "name": "沪深300ETF", "market": "etf", "asset_type": "etf", "exchange": "SH"},
         {"symbol": "000300", "name": "沪深300", "market": "index", "asset_type": "index", "exchange": "SH"},
     ]
-    local = list(db.scalars(select(Instrument).where((Instrument.symbol.contains(q)) | (Instrument.name.contains(q))).limit(20)).all()) if q else []
+    normalized = q.strip()
+    local = list(db.scalars(select(Instrument).where((Instrument.symbol.contains(normalized)) | (Instrument.name.contains(normalized))).limit(20)).all()) if normalized else []
     result = [{"symbol": x.symbol, "name": x.name, "market": x.market, "asset_type": x.asset_type, "exchange": x.exchange} for x in local]
-    for item in presets:
-        if (not q or q in item["symbol"] or q in item["name"]) and item not in result:
+    for item in lookup_instruments(normalized) if normalized else []:
+        if not any(existing["symbol"] == item["symbol"] and existing["name"] == item["name"] and existing["asset_type"] == item["asset_type"] for existing in result):
             result.append(item)
-    return result[:20]
+    for item in presets:
+        if (not normalized or normalized in item["symbol"] or normalized in item["name"]) and not any(existing["symbol"] == item["symbol"] and existing["name"] == item["name"] and existing["asset_type"] == item["asset_type"] for existing in result):
+            result.append(item)
+    return sorted(result, key=lambda item: (item["symbol"] != normalized, {"stock": 0, "etf": 1, "index": 2}.get(item["asset_type"], 9)))[:20]
 
 
 @router.post("/market-data/fetch")

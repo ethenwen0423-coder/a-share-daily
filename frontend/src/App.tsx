@@ -1,47 +1,1125 @@
 "use client";
-import { useMemo, useState } from "react";
-import { runApiBacktest } from "./api/client";
+import { useEffect, useState } from "react";
+import { runApiBacktest, searchInstruments } from "./api/client";
 import EquityChart from "./components/EquityChart";
-import type { BacktestResult, FormState } from "./types";
+import type {
+  BacktestResult,
+  FormState,
+  InstrumentSearchResult,
+} from "./types";
 import { runDemoBacktest } from "./utils/demoEngine";
 
-type Page="home"|"editor"|"running"|"report"|"history";
-const nav:[Page,string,string][]=[["home","总览","⌂"],["editor","策略工作台","⌘"],["history","历史记录","◷"]];
-const indicatorOptions=["SMA","EMA","MACD","RSI","布林带","成交量均线"];
-const defaultForm:FormState={symbol:"510300",instrumentName:"沪深300ETF",assetType:"etf",startDate:"2024-01-02",endDate:"2026-07-10",initialCash:100000,commission:.0003,stampDuty:.0005,slippage:.0005,fast:5,slow:20,position:1,stopLoss:.08,takeProfit:.20,maxHoldingDays:null,dataMode:"sample"};
-const pct=(v:number|null|undefined)=>v==null?"—":`${v>=0?"+":""}${(v*100).toFixed(2)}%`;
-const money=(v:number)=>new Intl.NumberFormat("zh-CN",{maximumFractionDigits:0}).format(v);
+type Page = "home" | "editor" | "running" | "report" | "history";
+const nav: [Page, string, string][] = [
+  ["home", "总览", "⌂"],
+  ["editor", "策略工作台", "⌘"],
+  ["history", "历史记录", "◷"],
+];
+const indicatorOptions = ["SMA", "EMA", "MACD", "RSI", "布林带", "成交量均线"];
+const assetTypeLabel: Record<FormState["assetType"], string> = {
+  stock: "A股",
+  etf: "ETF / 场内基金",
+  index: "主要指数",
+};
+const defaultForm: FormState = {
+  symbol: "510300",
+  instrumentName: "沪深300ETF",
+  assetType: "etf",
+  startDate: "2024-01-02",
+  endDate: "2026-07-10",
+  initialCash: 100000,
+  commission: 0.0003,
+  stampDuty: 0.0005,
+  slippage: 0.0005,
+  fast: 5,
+  slow: 20,
+  position: 1,
+  stopLoss: 0.08,
+  takeProfit: 0.2,
+  maxHoldingDays: null,
+  dataMode: "sample",
+};
+const pct = (v: number | null | undefined) =>
+  v == null ? "—" : `${v >= 0 ? "+" : ""}${(v * 100).toFixed(2)}%`;
+const money = (v: number) =>
+  new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 0 }).format(v);
 
-export default function App(){
-  const [page,setPage]=useState<Page>("home");const[form,setForm]=useState<FormState>(defaultForm);const[result,setResult]=useState<BacktestResult|null>(null);const[history,setHistory]=useState<BacktestResult[]>([]);const[progress,setProgress]=useState(0);const[statusText,setStatusText]=useState("");const[error,setError]=useState("");const[enabled,setEnabled]=useState<string[]>(["SMA"]);
-  const go=(p:Page)=>{setPage(p);window.scrollTo({top:0,behavior:"smooth"});};
-  const update=<K extends keyof FormState>(key:K,value:FormState[K])=>setForm(prev=>({...prev,[key]:value}));
-  const run=async()=>{setError("");setProgress(12);setStatusText("正在校验策略参数");go("running");await new Promise(r=>setTimeout(r,250));setProgress(38);setStatusText(form.dataMode==="akshare"?"正在请求 AKShare 并检查本地缓存":"正在载入固定种子模拟行情");await new Promise(r=>setTimeout(r,300));setProgress(68);setStatusText("正在逐日计算信号、成本和资产曲线");try{let next:BacktestResult;try{next=await runApiBacktest(form);}catch(e){if(form.dataMode==="akshare")throw e;next=runDemoBacktest(form);}setProgress(92);setStatusText("正在计算绩效指标并生成报告");await new Promise(r=>setTimeout(r,260));setResult(next);setHistory(prev=>[{...next,id:next.id||Date.now()},...prev]);setProgress(100);go("report");}catch(e){setError(e instanceof Error?e.message:"回测失败");setProgress(100);}};
-  const latest=result||history[0];
-  return <div className="appShell">
-    <aside className="sidebar"><button className="logo" onClick={()=>go("home")}><span>Q</span><div><b>量化策略实验室</b><small>QUANT LAB</small></div></button><div className="researchBadge"><i/>仅研究回测 · 不接实盘</div><nav>{nav.map(([id,label,icon])=><button key={id} className={page===id?"active":""} onClick={()=>go(id)}><span>{icon}</span>{label}</button>)}</nav><div className="sideFoot"><b>数据与成交纪律</b><p>AKShare 日线 · T+1 开盘成交<br/>固定种子样本可复现</p><span>v0.1 MVP</span></div></aside>
-    <div className="mainArea"><header className="topbar"><div><span className="mobileBrand">Q</span><p>{page==="home"?"研究总览":page==="editor"?"策略工作台":page==="running"?"回测运行":page==="report"?"回测报告":"历史记录"}</p></div><div className="topActions"><span className="health"><i/>研究服务就绪</span><button className="ghostBtn" onClick={()=>go("history")}>历史记录</button><button className="primaryBtn" onClick={()=>go("editor")}>＋ 新建回测</button></div></header>
-      {page==="home"&&<Home latest={latest} onCreate={()=>go("editor")} onReport={()=>latest&&go("report")}/>} 
-      {page==="editor"&&<Editor form={form} update={update} enabled={enabled} setEnabled={setEnabled} onRun={run}/>} 
-      {page==="running"&&<Running progress={progress} text={statusText} error={error} onRetry={()=>go("editor")}/>} 
-      {page==="report"&&result&&<Report result={result} form={form}/>} 
-      {page==="report"&&!result&&<Empty title="还没有可查看的报告" action={()=>go("editor")}/>} 
-      {page==="history"&&<History rows={history} onOpen={(row)=>{setResult(row);go("report");}} onRerun={run}/>} 
+export default function App() {
+  const [page, setPage] = useState<Page>("home");
+  const [form, setForm] = useState<FormState>(defaultForm);
+  const [result, setResult] = useState<BacktestResult | null>(null);
+  const [history, setHistory] = useState<BacktestResult[]>([]);
+  const [progress, setProgress] = useState(0);
+  const [statusText, setStatusText] = useState("");
+  const [error, setError] = useState("");
+  const [enabled, setEnabled] = useState<string[]>(["SMA"]);
+  const go = (p: Page) => {
+    setPage(p);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+  const update = <K extends keyof FormState>(key: K, value: FormState[K]) =>
+    setForm((prev) => ({ ...prev, [key]: value }));
+  const run = async () => {
+    setError("");
+    setProgress(12);
+    setStatusText("正在校验策略参数");
+    go("running");
+    await new Promise((r) => setTimeout(r, 250));
+    setProgress(38);
+    setStatusText(
+      form.dataMode === "akshare"
+        ? "正在请求 AKShare 并检查本地缓存"
+        : "正在载入固定种子模拟行情",
+    );
+    await new Promise((r) => setTimeout(r, 300));
+    setProgress(68);
+    setStatusText("正在逐日计算信号、成本和资产曲线");
+    try {
+      let next: BacktestResult;
+      try {
+        next = await runApiBacktest(form);
+      } catch (e) {
+        if (form.dataMode === "akshare") throw e;
+        next = runDemoBacktest(form);
+      }
+      setProgress(92);
+      setStatusText("正在计算绩效指标并生成报告");
+      await new Promise((r) => setTimeout(r, 260));
+      setResult(next);
+      setHistory((prev) => [{ ...next, id: next.id || Date.now() }, ...prev]);
+      setProgress(100);
+      go("report");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "回测失败");
+      setProgress(100);
+    }
+  };
+  const latest = result || history[0];
+  return (
+    <div className="appShell">
+      <aside className="sidebar">
+        <button className="logo" onClick={() => go("home")}>
+          <span>Q</span>
+          <div>
+            <b>量化策略实验室</b>
+            <small>QUANT LAB</small>
+          </div>
+        </button>
+        <div className="researchBadge">
+          <i />
+          仅研究回测 · 不接实盘
+        </div>
+        <nav>
+          {nav.map(([id, label, icon]) => (
+            <button
+              key={id}
+              className={page === id ? "active" : ""}
+              onClick={() => go(id)}
+            >
+              <span>{icon}</span>
+              {label}
+            </button>
+          ))}
+        </nav>
+        <div className="sideFoot">
+          <b>数据与成交纪律</b>
+          <p>
+            AKShare 日线 · T+1 开盘成交
+            <br />
+            固定种子样本可复现
+          </p>
+          <span>v0.1 MVP</span>
+        </div>
+      </aside>
+      <div className="mainArea">
+        <header className="topbar">
+          <div>
+            <span className="mobileBrand">Q</span>
+            <p>
+              {page === "home"
+                ? "研究总览"
+                : page === "editor"
+                  ? "策略工作台"
+                  : page === "running"
+                    ? "回测运行"
+                    : page === "report"
+                      ? "回测报告"
+                      : "历史记录"}
+            </p>
+          </div>
+          <div className="topActions">
+            <span className="health">
+              <i />
+              研究服务就绪
+            </span>
+            <button className="ghostBtn" onClick={() => go("history")}>
+              历史记录
+            </button>
+            <button className="primaryBtn" onClick={() => go("editor")}>
+              ＋ 新建回测
+            </button>
+          </div>
+        </header>
+        {page === "home" && (
+          <Home
+            latest={latest}
+            onCreate={() => go("editor")}
+            onReport={() => latest && go("report")}
+          />
+        )}
+        {page === "editor" && (
+          <Editor
+            form={form}
+            update={update}
+            enabled={enabled}
+            setEnabled={setEnabled}
+            onRun={run}
+          />
+        )}
+        {page === "running" && (
+          <Running
+            progress={progress}
+            text={statusText}
+            error={error}
+            onRetry={() => go("editor")}
+          />
+        )}
+        {page === "report" && result && <Report result={result} form={form} />}
+        {page === "report" && !result && (
+          <Empty title="还没有可查看的报告" action={() => go("editor")} />
+        )}
+        {page === "history" && (
+          <History
+            rows={history}
+            onOpen={(row) => {
+              setResult(row);
+              go("report");
+            }}
+            onRerun={run}
+          />
+        )}
+      </div>
     </div>
-  </div>;
+  );
 }
 
-function Home({latest,onCreate,onReport}:{latest:BacktestResult|null;onCreate:()=>void;onReport:()=>void}){return <main className="content homePage"><section className="heroPanel"><div><span className="eyebrow">VISUAL STRATEGY BACKTESTING</span><h1>把交易想法，变成<br/><em>可验证的历史证据</em></h1><p>无需编写 Python。组合技术指标与风控条件，用同一份数据、参数和策略版本复现每一次回测。</p><div className="heroActions"><button className="primaryBtn large" onClick={onCreate}>开始创建策略 →</button><span>日线 · 单标的 · A股 / ETF / 指数</span></div></div><div className="heroDiagram"><div className="flowStep"><span>01</span><b>定义规则</b><small>SMA5 上穿 SMA20</small></div><i>→</i><div className="flowStep"><span>02</span><b>执行回测</b><small>T+1 开盘成交</small></div><i>→</i><div className="flowStep focus"><span>03</span><b>核验证据</b><small>收益 · 回撤 · 交易</small></div></div></section><section className="summaryRow"><article><span>数据纪律</span><b>拒绝虚假行情</b><p>AKShare 异常或空数据时立即停止。</p></article><article><span>成交纪律</span><b>无未来函数</b><p>收盘确认信号，下一交易日开盘成交。</p></article><article><span>复现纪律</span><b>版本化策略</b><p>策略参数与数据快照随报告保存。</p></article></section><section className="splitSection"><div className="sectionBlock"><div className="sectionTitle"><div><span>RECENT RUN</span><h2>最近回测</h2></div>{latest&&<button onClick={onReport}>查看完整报告 →</button>}</div>{latest?<div className="latestRun"><div className="runIdentity"><span className="instrumentIcon">3E</span><div><b>{latest.instrument_name||latest.symbol}</b><small>{latest.symbol} · 双均线策略</small></div><span className="successPill">已完成</span></div><div className="miniMetrics"><div><span>累计收益</span><b className={(latest.metrics.total_return||0)>=0?"gain":"loss"}>{pct(latest.metrics.total_return)}</b></div><div><span>最大回撤</span><b>{pct(latest.metrics.max_drawdown)}</b></div><div><span>夏普比率</span><b>{latest.metrics.sharpe_ratio?.toFixed(2)||"—"}</b></div><div><span>交易次数</span><b>{latest.metrics.trade_count}</b></div></div></div>:<EmptyInline onCreate={onCreate}/>}</div><div className="sectionBlock methodBlock"><div className="sectionTitle"><div><span>METHODOLOGY</span><h2>当前回测口径</h2></div></div><dl><div><dt>信号时点</dt><dd>T 日收盘后确认</dd></div><div><dt>成交时点</dt><dd>T+1 交易日开盘</dd></div><div><dt>基准</dt><dd>标的买入并持有</dd></div><div><dt>交易单位</dt><dd>100 股整数手</dd></div></dl></div></section></main>}
+function Home({
+  latest,
+  onCreate,
+  onReport,
+}: {
+  latest: BacktestResult | null;
+  onCreate: () => void;
+  onReport: () => void;
+}) {
+  return (
+    <main className="content homePage">
+      <section className="heroPanel">
+        <div>
+          <span className="eyebrow">VISUAL STRATEGY BACKTESTING</span>
+          <h1>
+            把交易想法，变成
+            <br />
+            <em>可验证的历史证据</em>
+          </h1>
+          <p>
+            无需编写
+            Python。组合技术指标与风控条件，用同一份数据、参数和策略版本复现每一次回测。
+          </p>
+          <div className="heroActions">
+            <button className="primaryBtn large" onClick={onCreate}>
+              开始创建策略 →
+            </button>
+            <span>日线 · 单标的 · A股 / ETF / 指数</span>
+          </div>
+        </div>
+        <div className="heroDiagram">
+          <div className="flowStep">
+            <span>01</span>
+            <b>定义规则</b>
+            <small>SMA5 上穿 SMA20</small>
+          </div>
+          <i>→</i>
+          <div className="flowStep">
+            <span>02</span>
+            <b>执行回测</b>
+            <small>T+1 开盘成交</small>
+          </div>
+          <i>→</i>
+          <div className="flowStep focus">
+            <span>03</span>
+            <b>核验证据</b>
+            <small>收益 · 回撤 · 交易</small>
+          </div>
+        </div>
+      </section>
+      <section className="summaryRow">
+        <article>
+          <span>数据纪律</span>
+          <b>拒绝虚假行情</b>
+          <p>AKShare 异常或空数据时立即停止。</p>
+        </article>
+        <article>
+          <span>成交纪律</span>
+          <b>无未来函数</b>
+          <p>收盘确认信号，下一交易日开盘成交。</p>
+        </article>
+        <article>
+          <span>复现纪律</span>
+          <b>版本化策略</b>
+          <p>策略参数与数据快照随报告保存。</p>
+        </article>
+      </section>
+      <section className="splitSection">
+        <div className="sectionBlock">
+          <div className="sectionTitle">
+            <div>
+              <span>RECENT RUN</span>
+              <h2>最近回测</h2>
+            </div>
+            {latest && <button onClick={onReport}>查看完整报告 →</button>}
+          </div>
+          {latest ? (
+            <div className="latestRun">
+              <div className="runIdentity">
+                <span className="instrumentIcon">3E</span>
+                <div>
+                  <b>{latest.instrument_name || latest.symbol}</b>
+                  <small>{latest.symbol} · 双均线策略</small>
+                </div>
+                <span className="successPill">已完成</span>
+              </div>
+              <div className="miniMetrics">
+                <div>
+                  <span>累计收益</span>
+                  <b
+                    className={
+                      (latest.metrics.total_return || 0) >= 0 ? "gain" : "loss"
+                    }
+                  >
+                    {pct(latest.metrics.total_return)}
+                  </b>
+                </div>
+                <div>
+                  <span>最大回撤</span>
+                  <b>{pct(latest.metrics.max_drawdown)}</b>
+                </div>
+                <div>
+                  <span>夏普比率</span>
+                  <b>{latest.metrics.sharpe_ratio?.toFixed(2) || "—"}</b>
+                </div>
+                <div>
+                  <span>交易次数</span>
+                  <b>{latest.metrics.trade_count}</b>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <EmptyInline onCreate={onCreate} />
+          )}
+        </div>
+        <div className="sectionBlock methodBlock">
+          <div className="sectionTitle">
+            <div>
+              <span>METHODOLOGY</span>
+              <h2>当前回测口径</h2>
+            </div>
+          </div>
+          <dl>
+            <div>
+              <dt>信号时点</dt>
+              <dd>T 日收盘后确认</dd>
+            </div>
+            <div>
+              <dt>成交时点</dt>
+              <dd>T+1 交易日开盘</dd>
+            </div>
+            <div>
+              <dt>基准</dt>
+              <dd>标的买入并持有</dd>
+            </div>
+            <div>
+              <dt>交易单位</dt>
+              <dd>100 股整数手</dd>
+            </div>
+          </dl>
+        </div>
+      </section>
+    </main>
+  );
+}
 
-function Editor({form,update,enabled,setEnabled,onRun}:{form:FormState;update:<K extends keyof FormState>(k:K,v:FormState[K])=>void;enabled:string[];setEnabled:(x:string[])=>void;onRun:()=>void}){const toggle=(x:string)=>setEnabled(enabled.includes(x)?enabled.filter(v=>v!==x):[...enabled,x]);return <main className="content editorPage"><div className="pageLead"><div><span className="eyebrow">STRATEGY BUILDER</span><h1>可视化策略工作台</h1><p>按顺序配置标的、指标、买卖条件与风控。普通用户无需接触 JSON。</p></div><button className="templateBtn" onClick={()=>{Object.entries(defaultForm).forEach(([k,v])=>update(k as keyof FormState,v as never));}}>↻ 一键加载双均线示例</button></div><div className="stepper">{["选择标的","回测设置","技术指标","交易规则","仓位风控"].map((x,i)=><div className={i<5?"done":""} key={x}><span>{i+1}</span><b>{x}</b></div>)}</div><section className="editorLayout"><div className="formStack"><FormSection no="01" title="标的与数据"><div className="fieldGrid three"><Field label="证券代码"><input value={form.symbol} onChange={e=>update("symbol",e.target.value)} /></Field><Field label="标的名称"><input value={form.instrumentName} onChange={e=>update("instrumentName",e.target.value)} /></Field><Field label="资产类型"><select value={form.assetType} onChange={e=>update("assetType",e.target.value as FormState["assetType"])}><option value="stock">A股</option><option value="etf">ETF</option><option value="index">主要指数</option></select></Field></div><div className="fieldGrid three"><Field label="开始日期"><input type="date" value={form.startDate} onChange={e=>update("startDate",e.target.value)} /></Field><Field label="结束日期"><input type="date" value={form.endDate} onChange={e=>update("endDate",e.target.value)} /></Field><Field label="数据来源"><select value={form.dataMode} onChange={e=>update("dataMode",e.target.value as FormState["dataMode"])}><option value="sample">固定种子演示数据</option><option value="akshare">AKShare 真实行情（本地）</option></select></Field></div><p className="hint">公网版本默认使用可复现的固定种子行情；连接本地 Python 服务后可切换 AKShare，空数据不会执行回测。</p></FormSection><FormSection no="02" title="资金与交易成本"><div className="fieldGrid four"><Field label="初始资金（元）"><input type="number" value={form.initialCash} onChange={e=>update("initialCash",+e.target.value)} /></Field><Field label="手续费率"><input type="number" step="0.0001" value={form.commission} onChange={e=>update("commission",+e.target.value)} /></Field><Field label="卖出印花税率"><input type="number" step="0.0001" value={form.stampDuty} onChange={e=>update("stampDuty",+e.target.value)} /></Field><Field label="滑点率"><input type="number" step="0.0001" value={form.slippage} onChange={e=>update("slippage",+e.target.value)} /></Field></div></FormSection><FormSection no="03" title="技术指标"><div className="indicatorPicker">{indicatorOptions.map(x=><button className={enabled.includes(x)?"selected":""} onClick={()=>toggle(x)} key={x}><span>{enabled.includes(x)?"✓":"＋"}</span>{x}</button>)}</div><div className="indicatorRows"><div className="indicatorRow"><span className="drag">⋮⋮</span><b>SMA 快线</b><Field label="周期"><input type="number" min="2" value={form.fast} onChange={e=>update("fast",+e.target.value)} /></Field><span className="sourceChip">收盘价</span></div><div className="indicatorRow"><span className="drag">⋮⋮</span><b>SMA 慢线</b><Field label="周期"><input type="number" min="3" value={form.slow} onChange={e=>update("slow",+e.target.value)} /></Field><span className="sourceChip">收盘价</span></div></div></FormSection><FormSection no="04" title="买入与卖出规则"><div className="rulesGrid"><div className="ruleBox entry"><div><span>买入条件</span><b>全部满足 AND</b></div><p><strong>SMA {form.fast}</strong><em>上穿</em><strong>SMA {form.slow}</strong></p><button>＋ 添加条件</button></div><div className="ruleBox exit"><div><span>卖出条件</span><b>任一满足 OR</b></div><p><strong>SMA {form.fast}</strong><em>下穿</em><strong>SMA {form.slow}</strong></p><button>＋ 添加条件</button></div></div></FormSection><FormSection no="05" title="仓位与风控"><div className="fieldGrid four"><Field label="固定仓位比例"><div className="suffix"><input type="number" min="10" max="100" value={form.position*100} onChange={e=>update("position",+e.target.value/100)} /><span>%</span></div></Field><Field label="固定止损"><div className="suffix"><input type="number" value={form.stopLoss*100} onChange={e=>update("stopLoss",+e.target.value/100)} /><span>%</span></div></Field><Field label="固定止盈"><div className="suffix"><input type="number" value={form.takeProfit*100} onChange={e=>update("takeProfit",+e.target.value/100)} /><span>%</span></div></Field><Field label="最大持仓天数"><input placeholder="不限制" type="number" value={form.maxHoldingDays??""} onChange={e=>update("maxHoldingDays",e.target.value?+e.target.value:null)} /></Field></div></FormSection></div><aside className="runSummary"><span className="eyebrow">RUN SUMMARY</span><h3>回测摘要</h3><dl><div><dt>标的</dt><dd>{form.instrumentName}<small>{form.symbol}</small></dd></div><div><dt>区间</dt><dd>{form.startDate}<small>至 {form.endDate}</small></dd></div><div><dt>初始资金</dt><dd>¥ {money(form.initialCash)}</dd></div><div><dt>策略</dt><dd>SMA {form.fast} / {form.slow}<small>T+1 开盘成交</small></dd></div><div><dt>数据</dt><dd>{form.dataMode==="sample"?"固定种子样本":"AKShare"}</dd></div></dl>{form.fast>=form.slow&&<p className="fieldError">快线周期必须小于慢线周期</p>}<button className="primaryBtn runButton" disabled={form.fast>=form.slow} onClick={onRun}>开始回测 <span>→</span></button><button className="saveButton">保存策略版本</button><p className="riskText">本功能仅用于历史研究，不构成投资建议。</p></aside></section></main>}
+function Editor({
+  form,
+  update,
+  enabled,
+  setEnabled,
+  onRun,
+}: {
+  form: FormState;
+  update: <K extends keyof FormState>(k: K, v: FormState[K]) => void;
+  enabled: string[];
+  setEnabled: (x: string[]) => void;
+  onRun: () => void;
+}) {
+  const [lookupState, setLookupState] = useState<
+    "idle" | "loading" | "success" | "error"
+  >(form.instrumentName ? "success" : "idle");
+  const [matches, setMatches] = useState<InstrumentSearchResult[]>([]);
+  const toggle = (x: string) =>
+    setEnabled(
+      enabled.includes(x) ? enabled.filter((v) => v !== x) : [...enabled, x],
+    );
+  const chooseInstrument = (instrument: InstrumentSearchResult) => {
+    update("instrumentName", instrument.name);
+    update("assetType", instrument.asset_type);
+    setLookupState("success");
+  };
 
-function Running({progress,text,error,onRetry}:{progress:number;text:string;error:string;onRetry:()=>void}){return <main className="content runningPage"><div className="runningCard"><div className={error?"runOrb errorOrb":"runOrb"}><span>{error?"!":`${progress}%`}</span></div><span className="eyebrow">BACKTEST ENGINE</span><h1>{error?"回测未完成":"正在执行回测"}</h1><p>{error||text}</p><div className="progressTrack"><i style={{width:`${progress}%`}}/></div><div className="runStages">{["参数校验","行情准备","信号计算","绩效分析"].map((x,i)=><span className={progress>i*25?"done":""} key={x}>{progress>i*25?"✓":"○"} {x}</span>)}</div>{error&&<button className="primaryBtn" onClick={onRetry}>返回修改参数</button>}</div></main>}
+  useEffect(() => {
+    if (!/^\d{6}$/.test(form.symbol)) {
+      setMatches([]);
+      setLookupState("idle");
+      return;
+    }
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setLookupState("loading");
+      try {
+        const found = await searchInstruments(form.symbol, controller.signal);
+        const exact = found.filter((item) => item.symbol === form.symbol);
+        const candidates = exact.length ? exact : found;
+        if (!candidates.length) {
+          update("instrumentName", "");
+          setMatches([]);
+          setLookupState("error");
+          return;
+        }
+        setMatches(candidates);
+        chooseInstrument(candidates[0]);
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        update("instrumentName", "");
+        setMatches([]);
+        setLookupState("error");
+      }
+    }, 350);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [form.symbol]);
 
-function Report({result,form}:{result:BacktestResult;form:FormState}){const m=result.metrics;return <main className="content reportPage"><div className="reportHead"><div><span className="eyebrow">BACKTEST REPORT · STRATEGY V{result.strategy_version}</span><h1>{result.instrument_name||result.symbol} · 双均线策略</h1><p>{form.startDate} — {form.endDate} · 数据快照 {new Date(result.data_snapshot_time).toLocaleString("zh-CN")}</p></div><div className="reportActions"><button className="ghostBtn" onClick={()=>window.print()}>打印报告</button><span className="successPill">回测完成</span></div></div>{result.warnings.length>0&&<div className="verifyBanner"><b>需进一步核验</b><span>{result.warnings.join("；")}</span></div>}<section className="metricGrid">{[["累计收益率",pct(m.total_return),m.total_return], ["年化收益率",pct(m.annualized_return),m.annualized_return], ["最大回撤",pct(m.max_drawdown),m.max_drawdown], ["夏普比率",m.sharpe_ratio?.toFixed(2)||"—",m.sharpe_ratio], ["基准收益",pct(m.benchmark_return),m.benchmark_return], ["超额收益",pct(m.excess_return),m.excess_return], ["胜率",m.win_rate==null?"—":`${(m.win_rate*100).toFixed(1)}%`,m.win_rate], ["完整交易",String(m.trade_count),0]].map(([label,value,tone])=><article key={label as string}><span>{label}</span><b className={typeof tone==="number"&&tone>0?"gain":typeof tone==="number"&&tone<0?"loss":""}>{value}</b><small>{label==="最大回撤"?"历史峰值至谷底":label==="夏普比率"?"年化 252 个交易日":"按策略权益计算"}</small></article>)}</section><section className="reportGrid"><article className="chartPanel wide"><div className="panelTitle"><div><span>EQUITY CURVE</span><h2>策略净值与买入持有</h2></div><small>净值基准 = 1.00</small></div><EquityChart data={result.equity}/></article><article className="chartPanel"><div className="panelTitle"><div><span>DRAWDOWN</span><h2>回撤曲线</h2></div><small>单位：%</small></div><EquityChart data={result.equity} mode="drawdown"/></article><article className="parameterPanel"><div className="panelTitle"><div><span>REPRODUCIBILITY</span><h2>复现信息</h2></div></div><dl><div><dt>数据来源</dt><dd>{result.data_source}</dd></div><div><dt>复权方式</dt><dd>前复权 qfq</dd></div><div><dt>初始资金</dt><dd>¥ {money(form.initialCash)}</dd></div><div><dt>手续费 / 印花税</dt><dd>{form.commission} / {form.stampDuty}</dd></div><div><dt>滑点率</dt><dd>{form.slippage}</dd></div><div><dt>成交口径</dt><dd>T 日收盘确认，T+1 开盘成交</dd></div></dl></article></section><section className="tradeSection"><div className="sectionTitle"><div><span>TRADE LEDGER</span><h2>完整交易明细</h2></div><small>共 {result.trades.length} 笔成交</small></div><div className="tableWrap"><table><thead><tr><th>信号日期</th><th>成交日期</th><th>方向</th><th>成交价</th><th>数量</th><th>手续费</th><th>印花税</th><th>已实现盈亏</th><th>原因</th></tr></thead><tbody>{result.trades.slice(0,20).map((t,i)=><tr key={i}><td>{t.signal_date}</td><td>{t.trade_date}</td><td><span className={t.side==="buy"?"buyTag":"sellTag"}>{t.side==="buy"?"买入":"卖出"}</span></td><td>{t.price.toFixed(3)}</td><td>{t.quantity}</td><td>{t.commission.toFixed(2)}</td><td>{t.stamp_duty.toFixed(2)}</td><td className={(t.realized_profit||0)>=0?"gain":"loss"}>{t.realized_profit==null?"—":money(t.realized_profit)}</td><td>{t.reason}</td></tr>)}</tbody></table></div></section><div className="disclaimer"><b>风险提示</b><p>本结果基于历史数据和指定参数，不代表未来收益，不构成投资建议。固定种子数据仅用于验证回测流程；投资研究应使用已核验的真实行情。</p></div></main>}
+  const onSymbolChange = (value: string) => {
+    const symbol = value.replace(/\D/g, "").slice(0, 6);
+    update("symbol", symbol);
+    update("instrumentName", "");
+    setMatches([]);
+    setLookupState("idle");
+  };
+  const instrumentReady =
+    lookupState === "success" && Boolean(form.instrumentName);
+  return (
+    <main className="content editorPage">
+      <div className="pageLead">
+        <div>
+          <span className="eyebrow">STRATEGY BUILDER</span>
+          <h1>可视化策略工作台</h1>
+          <p>按顺序配置标的、指标、买卖条件与风控。普通用户无需接触 JSON。</p>
+        </div>
+        <button
+          className="templateBtn"
+          onClick={() => {
+            Object.entries(defaultForm).forEach(([k, v]) =>
+              update(k as keyof FormState, v as never),
+            );
+            setMatches([]);
+            setLookupState("success");
+          }}
+        >
+          ↻ 一键加载双均线示例
+        </button>
+      </div>
+      <div className="stepper">
+        {["选择标的", "回测设置", "技术指标", "交易规则", "仓位风控"].map(
+          (x, i) => (
+            <div className={i < 5 ? "done" : ""} key={x}>
+              <span>{i + 1}</span>
+              <b>{x}</b>
+            </div>
+          ),
+        )}
+      </div>
+      <section className="editorLayout">
+        <div className="formStack">
+          <FormSection no="01" title="标的与数据">
+            <div className="fieldGrid three">
+              <Field label="证券代码">
+                <input
+                  inputMode="numeric"
+                  maxLength={6}
+                  placeholder="输入 6 位代码"
+                  value={form.symbol}
+                  onChange={(e) => onSymbolChange(e.target.value)}
+                  aria-describedby="instrument-lookup-status"
+                />
+              </Field>
+              <Field label="标的名称">
+                <input
+                  className="autoField"
+                  value={form.instrumentName}
+                  placeholder="输入代码后自动识别"
+                  readOnly
+                  aria-readonly="true"
+                />
+              </Field>
+              <Field label="资产类型">
+                <input
+                  className="autoField"
+                  value={instrumentReady ? assetTypeLabel[form.assetType] : ""}
+                  placeholder="输入代码后自动识别"
+                  readOnly
+                  aria-readonly="true"
+                  aria-label="自动识别的资产类型"
+                />
+              </Field>
+            </div>
+            <div
+              id="instrument-lookup-status"
+              className={`lookupStatus ${lookupState}`}
+              aria-live="polite"
+            >
+              {lookupState === "loading" ? (
+                <>
+                  <i />正在识别证券代码…
+                </>
+              ) : lookupState === "success" ? (
+                <>
+                  ✓ 已识别：{form.instrumentName} · {assetTypeLabel[form.assetType]}
+                </>
+              ) : lookupState === "error" ? (
+                <>未找到该证券代码，请检查后重试</>
+              ) : form.symbol.length > 0 && form.symbol.length < 6 ? (
+                <>请输入完整的 6 位证券代码</>
+              ) : (
+                <>输入代码后将自动带出名称和资产类型</>
+              )}
+            </div>
+            {matches.length > 1 && (
+              <div className="instrumentMatches">
+                <span>该代码对应多个标的，请确认：</span>
+                {matches.map((item) => (
+                  <button
+                    type="button"
+                    className={
+                      item.name === form.instrumentName &&
+                      item.asset_type === form.assetType
+                        ? "selected"
+                        : ""
+                    }
+                    key={`${item.symbol}-${item.name}-${item.asset_type}`}
+                    onClick={() => chooseInstrument(item)}
+                  >
+                    <b>{item.name}</b>
+                    <small>
+                      {assetTypeLabel[item.asset_type]} · {item.exchange}
+                    </small>
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="fieldGrid three">
+              <Field label="开始日期">
+                <input
+                  type="date"
+                  value={form.startDate}
+                  onChange={(e) => update("startDate", e.target.value)}
+                />
+              </Field>
+              <Field label="结束日期">
+                <input
+                  type="date"
+                  value={form.endDate}
+                  onChange={(e) => update("endDate", e.target.value)}
+                />
+              </Field>
+              <Field label="数据来源">
+                <select
+                  value={form.dataMode}
+                  onChange={(e) =>
+                    update("dataMode", e.target.value as FormState["dataMode"])
+                  }
+                >
+                  <option value="sample">固定种子演示数据</option>
+                  <option value="akshare">AKShare 真实行情（本地）</option>
+                </select>
+              </Field>
+            </div>
+            <p className="hint">
+              公网版本默认使用可复现的固定种子行情；连接本地 Python 服务后可切换
+              AKShare，空数据不会执行回测。
+            </p>
+          </FormSection>
+          <FormSection no="02" title="资金与交易成本">
+            <div className="fieldGrid four">
+              <Field label="初始资金（元）">
+                <input
+                  type="number"
+                  value={form.initialCash}
+                  onChange={(e) => update("initialCash", +e.target.value)}
+                />
+              </Field>
+              <Field label="手续费率">
+                <input
+                  type="number"
+                  step="0.0001"
+                  value={form.commission}
+                  onChange={(e) => update("commission", +e.target.value)}
+                />
+              </Field>
+              <Field label="卖出印花税率">
+                <input
+                  type="number"
+                  step="0.0001"
+                  value={form.stampDuty}
+                  onChange={(e) => update("stampDuty", +e.target.value)}
+                />
+              </Field>
+              <Field label="滑点率">
+                <input
+                  type="number"
+                  step="0.0001"
+                  value={form.slippage}
+                  onChange={(e) => update("slippage", +e.target.value)}
+                />
+              </Field>
+            </div>
+          </FormSection>
+          <FormSection no="03" title="技术指标">
+            <div className="indicatorPicker">
+              {indicatorOptions.map((x) => (
+                <button
+                  className={enabled.includes(x) ? "selected" : ""}
+                  onClick={() => toggle(x)}
+                  key={x}
+                >
+                  <span>{enabled.includes(x) ? "✓" : "＋"}</span>
+                  {x}
+                </button>
+              ))}
+            </div>
+            <div className="indicatorRows">
+              <div className="indicatorRow">
+                <span className="drag">⋮⋮</span>
+                <b>SMA 快线</b>
+                <Field label="周期">
+                  <input
+                    type="number"
+                    min="2"
+                    value={form.fast}
+                    onChange={(e) => update("fast", +e.target.value)}
+                  />
+                </Field>
+                <span className="sourceChip">收盘价</span>
+              </div>
+              <div className="indicatorRow">
+                <span className="drag">⋮⋮</span>
+                <b>SMA 慢线</b>
+                <Field label="周期">
+                  <input
+                    type="number"
+                    min="3"
+                    value={form.slow}
+                    onChange={(e) => update("slow", +e.target.value)}
+                  />
+                </Field>
+                <span className="sourceChip">收盘价</span>
+              </div>
+            </div>
+          </FormSection>
+          <FormSection no="04" title="买入与卖出规则">
+            <div className="rulesGrid">
+              <div className="ruleBox entry">
+                <div>
+                  <span>买入条件</span>
+                  <b>全部满足 AND</b>
+                </div>
+                <p>
+                  <strong>SMA {form.fast}</strong>
+                  <em>上穿</em>
+                  <strong>SMA {form.slow}</strong>
+                </p>
+                <button>＋ 添加条件</button>
+              </div>
+              <div className="ruleBox exit">
+                <div>
+                  <span>卖出条件</span>
+                  <b>任一满足 OR</b>
+                </div>
+                <p>
+                  <strong>SMA {form.fast}</strong>
+                  <em>下穿</em>
+                  <strong>SMA {form.slow}</strong>
+                </p>
+                <button>＋ 添加条件</button>
+              </div>
+            </div>
+          </FormSection>
+          <FormSection no="05" title="仓位与风控">
+            <div className="fieldGrid four">
+              <Field label="固定仓位比例">
+                <div className="suffix">
+                  <input
+                    type="number"
+                    min="10"
+                    max="100"
+                    value={form.position * 100}
+                    onChange={(e) => update("position", +e.target.value / 100)}
+                  />
+                  <span>%</span>
+                </div>
+              </Field>
+              <Field label="固定止损">
+                <div className="suffix">
+                  <input
+                    type="number"
+                    value={form.stopLoss * 100}
+                    onChange={(e) => update("stopLoss", +e.target.value / 100)}
+                  />
+                  <span>%</span>
+                </div>
+              </Field>
+              <Field label="固定止盈">
+                <div className="suffix">
+                  <input
+                    type="number"
+                    value={form.takeProfit * 100}
+                    onChange={(e) =>
+                      update("takeProfit", +e.target.value / 100)
+                    }
+                  />
+                  <span>%</span>
+                </div>
+              </Field>
+              <Field label="最大持仓天数">
+                <input
+                  placeholder="不限制"
+                  type="number"
+                  value={form.maxHoldingDays ?? ""}
+                  onChange={(e) =>
+                    update(
+                      "maxHoldingDays",
+                      e.target.value ? +e.target.value : null,
+                    )
+                  }
+                />
+              </Field>
+            </div>
+          </FormSection>
+        </div>
+        <aside className="runSummary">
+          <span className="eyebrow">RUN SUMMARY</span>
+          <h3>回测摘要</h3>
+          <dl>
+            <div>
+              <dt>标的</dt>
+              <dd>
+                {form.instrumentName || "待识别"}
+                <small>{form.symbol}</small>
+              </dd>
+            </div>
+            <div>
+              <dt>区间</dt>
+              <dd>
+                {form.startDate}
+                <small>至 {form.endDate}</small>
+              </dd>
+            </div>
+            <div>
+              <dt>初始资金</dt>
+              <dd>¥ {money(form.initialCash)}</dd>
+            </div>
+            <div>
+              <dt>策略</dt>
+              <dd>
+                SMA {form.fast} / {form.slow}
+                <small>T+1 开盘成交</small>
+              </dd>
+            </div>
+            <div>
+              <dt>数据</dt>
+              <dd>{form.dataMode === "sample" ? "固定种子样本" : "AKShare"}</dd>
+            </div>
+          </dl>
+          {form.fast >= form.slow && (
+            <p className="fieldError">快线周期必须小于慢线周期</p>
+          )}
+          {!instrumentReady && (
+            <p className="fieldError">请先输入并识别有效的证券代码</p>
+          )}
+          <button
+            className="primaryBtn runButton"
+            disabled={form.fast >= form.slow || !instrumentReady}
+            onClick={onRun}
+          >
+            开始回测 <span>→</span>
+          </button>
+          <button className="saveButton">保存策略版本</button>
+          <p className="riskText">本功能仅用于历史研究，不构成投资建议。</p>
+        </aside>
+      </section>
+    </main>
+  );
+}
 
-function History({rows,onOpen,onRerun}:{rows:BacktestResult[];onOpen:(x:BacktestResult)=>void;onRerun:()=>void}){return <main className="content historyPage"><div className="pageLead"><div><span className="eyebrow">RESEARCH ARCHIVE</span><h1>策略与回测记录</h1><p>连接本地 FastAPI 后，策略版本、数据快照和历史报告将持久保存至 SQLite。</p></div><button className="primaryBtn" onClick={onRerun}>再次运行示例</button></div>{rows.length?<div className="historyList">{rows.map((row,i)=><article key={row.id||i}><div><span className="instrumentIcon">3E</span><div><b>{row.instrument_name||row.symbol}</b><small>双均线趋势策略 · V{row.strategy_version}</small></div></div><span className="successPill">{row.status==="success"?"已完成":row.status}</span><dl><div><dt>累计收益</dt><dd className={(row.metrics.total_return||0)>=0?"gain":"loss"}>{pct(row.metrics.total_return)}</dd></div><div><dt>最大回撤</dt><dd>{pct(row.metrics.max_drawdown)}</dd></div><div><dt>交易次数</dt><dd>{row.metrics.trade_count}</dd></div></dl><button onClick={()=>onOpen(row)}>查看报告 →</button></article>)}</div>:<Empty title="还没有历史回测" action={onRerun}/>}<p className="historyNote">公网演示记录仅保留在当前页面内；持久化保存需启动本地 Python 服务。</p></main>}
+function Running({
+  progress,
+  text,
+  error,
+  onRetry,
+}: {
+  progress: number;
+  text: string;
+  error: string;
+  onRetry: () => void;
+}) {
+  return (
+    <main className="content runningPage">
+      <div className="runningCard">
+        <div className={error ? "runOrb errorOrb" : "runOrb"}>
+          <span>{error ? "!" : `${progress}%`}</span>
+        </div>
+        <span className="eyebrow">BACKTEST ENGINE</span>
+        <h1>{error ? "回测未完成" : "正在执行回测"}</h1>
+        <p>{error || text}</p>
+        <div className="progressTrack">
+          <i style={{ width: `${progress}%` }} />
+        </div>
+        <div className="runStages">
+          {["参数校验", "行情准备", "信号计算", "绩效分析"].map((x, i) => (
+            <span className={progress > i * 25 ? "done" : ""} key={x}>
+              {progress > i * 25 ? "✓" : "○"} {x}
+            </span>
+          ))}
+        </div>
+        {error && (
+          <button className="primaryBtn" onClick={onRetry}>
+            返回修改参数
+          </button>
+        )}
+      </div>
+    </main>
+  );
+}
 
-function FormSection({no,title,children}:{no:string;title:string;children:React.ReactNode}){return <section className="formSection"><div className="formSectionTitle"><span>{no}</span><h2>{title}</h2></div>{children}</section>}
-function Field({label,children}:{label:string;children:React.ReactNode}){return <label className="field"><span>{label}</span>{children}</label>}
-function EmptyInline({onCreate}:{onCreate:()=>void}){return <div className="emptyInline"><span>⌁</span><div><b>还没有回测记录</b><p>加载示例策略，几步即可完成第一次验证。</p></div><button onClick={onCreate}>创建回测</button></div>}
-function Empty({title,action}:{title:string;action:()=>void}){return <div className="fullEmpty"><span>⌁</span><h2>{title}</h2><button className="primaryBtn" onClick={action}>开始第一次回测</button></div>}
+function Report({ result, form }: { result: BacktestResult; form: FormState }) {
+  const m = result.metrics;
+  return (
+    <main className="content reportPage">
+      <div className="reportHead">
+        <div>
+          <span className="eyebrow">
+            BACKTEST REPORT · STRATEGY V{result.strategy_version}
+          </span>
+          <h1>{result.instrument_name || result.symbol} · 双均线策略</h1>
+          <p>
+            {form.startDate} — {form.endDate} · 数据快照{" "}
+            {new Date(result.data_snapshot_time).toLocaleString("zh-CN")}
+          </p>
+        </div>
+        <div className="reportActions">
+          <button className="ghostBtn" onClick={() => window.print()}>
+            打印报告
+          </button>
+          <span className="successPill">回测完成</span>
+        </div>
+      </div>
+      {result.warnings.length > 0 && (
+        <div className="verifyBanner">
+          <b>需进一步核验</b>
+          <span>{result.warnings.join("；")}</span>
+        </div>
+      )}
+      <section className="metricGrid">
+        {[
+          ["累计收益率", pct(m.total_return), m.total_return],
+          ["年化收益率", pct(m.annualized_return), m.annualized_return],
+          ["最大回撤", pct(m.max_drawdown), m.max_drawdown],
+          ["夏普比率", m.sharpe_ratio?.toFixed(2) || "—", m.sharpe_ratio],
+          ["基准收益", pct(m.benchmark_return), m.benchmark_return],
+          ["超额收益", pct(m.excess_return), m.excess_return],
+          [
+            "胜率",
+            m.win_rate == null ? "—" : `${(m.win_rate * 100).toFixed(1)}%`,
+            m.win_rate,
+          ],
+          ["完整交易", String(m.trade_count), 0],
+        ].map(([label, value, tone]) => (
+          <article key={label as string}>
+            <span>{label}</span>
+            <b
+              className={
+                typeof tone === "number" && tone > 0
+                  ? "gain"
+                  : typeof tone === "number" && tone < 0
+                    ? "loss"
+                    : ""
+              }
+            >
+              {value}
+            </b>
+            <small>
+              {label === "最大回撤"
+                ? "历史峰值至谷底"
+                : label === "夏普比率"
+                  ? "年化 252 个交易日"
+                  : "按策略权益计算"}
+            </small>
+          </article>
+        ))}
+      </section>
+      <section className="reportGrid">
+        <article className="chartPanel wide">
+          <div className="panelTitle">
+            <div>
+              <span>EQUITY CURVE</span>
+              <h2>策略净值与买入持有</h2>
+            </div>
+            <small>净值基准 = 1.00</small>
+          </div>
+          <EquityChart data={result.equity} />
+        </article>
+        <article className="chartPanel">
+          <div className="panelTitle">
+            <div>
+              <span>DRAWDOWN</span>
+              <h2>回撤曲线</h2>
+            </div>
+            <small>单位：%</small>
+          </div>
+          <EquityChart data={result.equity} mode="drawdown" />
+        </article>
+        <article className="parameterPanel">
+          <div className="panelTitle">
+            <div>
+              <span>REPRODUCIBILITY</span>
+              <h2>复现信息</h2>
+            </div>
+          </div>
+          <dl>
+            <div>
+              <dt>数据来源</dt>
+              <dd>{result.data_source}</dd>
+            </div>
+            <div>
+              <dt>复权方式</dt>
+              <dd>前复权 qfq</dd>
+            </div>
+            <div>
+              <dt>初始资金</dt>
+              <dd>¥ {money(form.initialCash)}</dd>
+            </div>
+            <div>
+              <dt>手续费 / 印花税</dt>
+              <dd>
+                {form.commission} / {form.stampDuty}
+              </dd>
+            </div>
+            <div>
+              <dt>滑点率</dt>
+              <dd>{form.slippage}</dd>
+            </div>
+            <div>
+              <dt>成交口径</dt>
+              <dd>T 日收盘确认，T+1 开盘成交</dd>
+            </div>
+          </dl>
+        </article>
+      </section>
+      <section className="tradeSection">
+        <div className="sectionTitle">
+          <div>
+            <span>TRADE LEDGER</span>
+            <h2>完整交易明细</h2>
+          </div>
+          <small>共 {result.trades.length} 笔成交</small>
+        </div>
+        <div className="tableWrap">
+          <table>
+            <thead>
+              <tr>
+                <th>信号日期</th>
+                <th>成交日期</th>
+                <th>方向</th>
+                <th>成交价</th>
+                <th>数量</th>
+                <th>手续费</th>
+                <th>印花税</th>
+                <th>已实现盈亏</th>
+                <th>原因</th>
+              </tr>
+            </thead>
+            <tbody>
+              {result.trades.slice(0, 20).map((t, i) => (
+                <tr key={i}>
+                  <td>{t.signal_date}</td>
+                  <td>{t.trade_date}</td>
+                  <td>
+                    <span className={t.side === "buy" ? "buyTag" : "sellTag"}>
+                      {t.side === "buy" ? "买入" : "卖出"}
+                    </span>
+                  </td>
+                  <td>{t.price.toFixed(3)}</td>
+                  <td>{t.quantity}</td>
+                  <td>{t.commission.toFixed(2)}</td>
+                  <td>{t.stamp_duty.toFixed(2)}</td>
+                  <td
+                    className={(t.realized_profit || 0) >= 0 ? "gain" : "loss"}
+                  >
+                    {t.realized_profit == null ? "—" : money(t.realized_profit)}
+                  </td>
+                  <td>{t.reason}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+      <div className="disclaimer">
+        <b>风险提示</b>
+        <p>
+          本结果基于历史数据和指定参数，不代表未来收益，不构成投资建议。固定种子数据仅用于验证回测流程；投资研究应使用已核验的真实行情。
+        </p>
+      </div>
+    </main>
+  );
+}
+
+function History({
+  rows,
+  onOpen,
+  onRerun,
+}: {
+  rows: BacktestResult[];
+  onOpen: (x: BacktestResult) => void;
+  onRerun: () => void;
+}) {
+  return (
+    <main className="content historyPage">
+      <div className="pageLead">
+        <div>
+          <span className="eyebrow">RESEARCH ARCHIVE</span>
+          <h1>策略与回测记录</h1>
+          <p>
+            连接本地 FastAPI 后，策略版本、数据快照和历史报告将持久保存至
+            SQLite。
+          </p>
+        </div>
+        <button className="primaryBtn" onClick={onRerun}>
+          再次运行示例
+        </button>
+      </div>
+      {rows.length ? (
+        <div className="historyList">
+          {rows.map((row, i) => (
+            <article key={row.id || i}>
+              <div>
+                <span className="instrumentIcon">3E</span>
+                <div>
+                  <b>{row.instrument_name || row.symbol}</b>
+                  <small>双均线趋势策略 · V{row.strategy_version}</small>
+                </div>
+              </div>
+              <span className="successPill">
+                {row.status === "success" ? "已完成" : row.status}
+              </span>
+              <dl>
+                <div>
+                  <dt>累计收益</dt>
+                  <dd
+                    className={
+                      (row.metrics.total_return || 0) >= 0 ? "gain" : "loss"
+                    }
+                  >
+                    {pct(row.metrics.total_return)}
+                  </dd>
+                </div>
+                <div>
+                  <dt>最大回撤</dt>
+                  <dd>{pct(row.metrics.max_drawdown)}</dd>
+                </div>
+                <div>
+                  <dt>交易次数</dt>
+                  <dd>{row.metrics.trade_count}</dd>
+                </div>
+              </dl>
+              <button onClick={() => onOpen(row)}>查看报告 →</button>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <Empty title="还没有历史回测" action={onRerun} />
+      )}
+      <p className="historyNote">
+        公网演示记录仅保留在当前页面内；持久化保存需启动本地 Python 服务。
+      </p>
+    </main>
+  );
+}
+
+function FormSection({
+  no,
+  title,
+  children,
+}: {
+  no: string;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="formSection">
+      <div className="formSectionTitle">
+        <span>{no}</span>
+        <h2>{title}</h2>
+      </div>
+      {children}
+    </section>
+  );
+}
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="field">
+      <span>{label}</span>
+      {children}
+    </label>
+  );
+}
+function EmptyInline({ onCreate }: { onCreate: () => void }) {
+  return (
+    <div className="emptyInline">
+      <span>⌁</span>
+      <div>
+        <b>还没有回测记录</b>
+        <p>加载示例策略，几步即可完成第一次验证。</p>
+      </div>
+      <button onClick={onCreate}>创建回测</button>
+    </div>
+  );
+}
+function Empty({ title, action }: { title: string; action: () => void }) {
+  return (
+    <div className="fullEmpty">
+      <span>⌁</span>
+      <h2>{title}</h2>
+      <button className="primaryBtn" onClick={action}>
+        开始第一次回测
+      </button>
+    </div>
+  );
+}
