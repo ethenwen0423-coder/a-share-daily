@@ -1,98 +1,121 @@
-# vinext-starter
+# 量化策略实验室
 
-A clean full-stack starter running on
-[vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
-Drizzle support.
+面向 A 股研究者的可视化量化策略回测 MVP。用户无需编写 Python，可以选择标的、配置技术指标、组合交易条件、设置交易成本与风控规则，并查看完整净值、回撤、绩效和交易证据。
 
-## Prerequisites
+> 仅用于研究与历史回测，不接入实盘交易，不构成投资建议。
 
-- Node.js `>=22.13.0`
+## 已实现功能
 
-## Quick Start
+- A 股、ETF、主要指数的日线单标的回测。
+- AKShare 统一数据适配层，覆盖股票、ETF、指数接口及字段清洗。
+- SQLite 行情缓存；优先读缓存，缺少区间时补拉，不生成虚假行情。
+- SMA、EMA、MACD、RSI、布林带、成交量均线注册式指标引擎。
+- 大于、小于、等于、上穿、下穿，以及 AND / OR 条件组。
+- 固定仓位比例、固定止损、固定止盈、最大持仓天数。
+- T 日收盘确认信号，T+1 开盘成交；A 股/ETF 按 100 股整数手。
+- 手续费、卖出印花税、滑点、可配置最低佣金。
+- 策略版本、回测记录、指标、权益曲线和交易明细持久化。
+- FastAPI OpenAPI 文档、React 策略工作台、运行状态、报告和历史记录。
+- 固定种子模拟行情用于离线测试和公网演示；收益不是写死结果。
+
+## 系统架构
+
+```text
+backend/app/data          AKShare 与缓存
+backend/app/indicators    指标注册与计算
+backend/app/strategies    安全规则解释器（无 eval/exec）
+backend/app/backtest      T+1 事件驱动回测引擎
+backend/app/analytics     绩效指标
+backend/app/models        SQLAlchemy 数据模型
+backend/app/api           FastAPI 路由
+frontend/src              React + TypeScript + ECharts
+app                       Sites 公网发布入口，共用 React 产品代码
+```
+
+## 环境要求
+
+- Python 3.13（本机已验证）
+- Node.js 22+
+- npm 10+
+
+## 安装
 
 ```bash
+python3.13 -m venv .venv
+.venv/bin/pip install -r backend/requirements.txt
 npm install
-npm run dev
-npm run build
+npm --prefix frontend install
+scripts/init_db.sh
 ```
 
-This starter does not use `wrangler.jsonc`.
+## 启动
 
-## Included Shape
+一键启动本地 FastAPI 与 Vite：
 
-- edit site code under `app/`
-- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
-- `vite.config.ts` simulates declared bindings for local development
-- `db/schema.ts` starts intentionally empty
-- `examples/d1/` contains an optional D1 example surface
-- `drizzle.config.ts` supports local migration generation when needed
-
-## Workspace Auth Headers
-
-OpenAI workspace sites can read the current user's email from
-`oai-authenticated-user-email`.
-
-SIWC-authenticated workspace sites may also receive
-`oai-authenticated-user-full-name` when the user's SIWC profile has a non-empty
-`name` claim. The full-name value is percent-encoded UTF-8 and is accompanied by
-`oai-authenticated-user-full-name-encoding: percent-encoded-utf-8`.
-
-Treat the full name as optional and fall back to email when it is absent:
-
-```tsx
-import { headers } from "next/headers";
-
-export default async function Home() {
-  const requestHeaders = await headers();
-  const email = requestHeaders.get("oai-authenticated-user-email");
-  const encodedFullName = requestHeaders.get("oai-authenticated-user-full-name");
-  const fullName =
-    encodedFullName &&
-    requestHeaders.get("oai-authenticated-user-full-name-encoding") ===
-      "percent-encoded-utf-8"
-      ? decodeURIComponent(encodedFullName)
-      : null;
-
-  const displayName = fullName ?? email;
-  // ...
-}
+```bash
+scripts/dev.sh
 ```
 
-## Optional Dispatch-Owned ChatGPT Sign-In
+也可以分别启动：
 
-Import the ready-to-use helpers from `app/chatgpt-auth.ts` when the site needs
-optional or required ChatGPT sign-in:
+```bash
+scripts/start_backend.sh
+scripts/start_frontend.sh
+```
 
-- Use `getChatGPTUser()` for optional signed-in UI.
-- Use `requireChatGPTUser(returnTo)` for server-rendered pages that should send
-  anonymous visitors through Sign in with ChatGPT.
-- Use `chatGPTSignInPath(returnTo)` and `chatGPTSignOutPath(returnTo)` for
-  browser links or actions.
-- Pass a same-origin relative `returnTo` path for the destination after sign-in
-  or sign-out. The helper validates and safely encodes it.
-- Mark protected pages with `export const dynamic = "force-dynamic"` because
-  they depend on per-request identity headers.
+- 前端：http://127.0.0.1:5173
+- API：http://127.0.0.1:8000
+- OpenAPI：http://127.0.0.1:8000/docs
 
-Dispatch owns `/signin-with-chatgpt`, `/signout-with-chatgpt`, `/callback`, the
-OAuth cookies, and identity header injection. Do not implement app routes for
-those reserved paths. Routes that do not import and call the helper remain
-anonymous-compatible.
+## 测试与构建
 
-SIWC establishes identity only; it does not prove workspace membership. Use the
-Sites hosting platform's access policy controls for workspace-wide restrictions,
-or enforce explicit server-side membership or allowlist checks.
+```bash
+npm run test:all
+```
 
-Use SIWC for account pages, user-specific dashboards, saved records, and write
-actions tied to the current ChatGPT user. Leave public content anonymous.
+该命令依次执行后端 pytest、前端类型检查、前端生产构建、Sites 生产构建和服务端渲染测试。后端测试使用固定 CSV，不依赖实时网络。
 
-## Useful Commands
+## AKShare 数据口径
 
-- `npm run dev`: start local development
-- `npm run build`: verify the vinext build output
-- `npm test`: build the starter and verify its rendered loading skeleton
-- `npm run db:generate`: generate Drizzle migrations after schema changes
+- 股票：`stock_zh_a_hist`
+- ETF：`fund_etf_hist_em`
+- 指数：`index_zh_a_hist`
+- 统一清洗为 `trade_date/open/high/low/close/volume/amount`。
+- 日期升序、重复交易日去重、数值和 OHLC 合法性校验。
+- 请求失败、返回空数据或字段异常时停止回测并返回明确错误。
+- `data_snapshot_time` 记录行情获取时间；同一行情、参数和策略版本可复现结果。
 
-## Learn More
+## 成交与成本口径
 
-- [vinext Documentation](https://github.com/cloudflare/vinext)
-- [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+1. T 日收盘后计算指标并确认信号。
+2. 最早在 T+1 个可交易日按开盘价成交。
+3. 买入价 = 原始开盘价 × (1 + 滑点率)。
+4. 卖出价 = 原始开盘价 × (1 - 滑点率)。
+5. 买卖均收佣金，卖出额外收印花税；最低佣金为独立参数。
+6. 止损、止盈基于收盘确认，下一交易日开盘成交。
+7. 默认回测结束时按最后交易日收盘价强制平仓，报告会记录该原因。
+
+## 绩效指标
+
+- 累计收益：期末资产 / 初始资产 - 1。
+- 年化收益：按 252 个交易日折算。
+- 年化波动：日收益标准差 × √252。
+- 夏普：日均超额收益 / 日收益标准差 × √252。
+- 最大回撤：净值相对历史峰值的最大跌幅。
+- 无交易、标准差为零、样本过短等场景返回 `null`，不使用误导性的零。
+
+## 当前限制
+
+- 只支持日线、单标的和固定仓位比例。
+- 本地 Python 服务提供真实 AKShare 与 SQLite 持久化；公网 Sites 版本提供固定种子演示，不托管 Python 进程。
+- 回测同步执行，长区间或高并发需迁移到后台任务队列。
+- 暂不处理涨跌停无法成交、停牌、分红现金流和复杂复权事件。
+- 不支持分钟线、多标的选股、机器学习、参数寻优、多用户和实盘交易。
+
+## 下一阶段
+
+1. 增加后台任务与进度事件。
+2. 补充涨跌停、停牌、公司行动等 A 股微观结构。
+3. 支持多标的组合、基准指数与再平衡。
+4. 将 SQLite 迁移 PostgreSQL，并增加用户权限。
+5. 在严格隔离研究与交易后，再评估模拟盘接入。

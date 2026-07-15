@@ -2,6 +2,9 @@
 
 # dependencies
 /node_modules
+/frontend/node_modules
+/frontend/dist
+/.venv
 /.pnp
 .pnp.*
 .yarn/*
@@ -40,3 +43,10 @@ next-env.d.ts
 /.wrangler/
 /outputs/
 /work/
+/data/*.db
+/data/*.db-*
+/output/playwright/
+/.playwright-cli/
+__pycache__/
+*.py[cod]
+.pytest_cache/
